@@ -28,7 +28,7 @@
     img: { intro: 'img/interview-room.jpg', desk: 'img/case-desk.jpg', audit: 'img/case-desk.jpg', interview: 'img/interview-room.jpg', turn: 'img/case-desk.jpg', end: 'img/court.jpg', reveal: 'img/street-1998.jpg', solution: 'img/court.jpg' },
     endNext: 'Чьё это было дело?',
     startHours: 24,
-    clock: { label: 'Срок задержания', missCost: 3 },
+    clock: { label: 'Срок задержания', missCost: 3, out: 'Срок задержания истёк. Адвокат уводит его из комнаты, остальные вопросы не заданы.' },
     minRead: 4,
     suspect: '⟦имя⟧',
     transcriptTitle: 'Протокол допроса. Комната 2, 5.10.98',
@@ -149,6 +149,7 @@
       {
         say: 'Вскрытия не было, потому что семьи отказались. Я им ничего не навязывал.',
         needs: ['relative'],
+        traps: { list: { say: 'Двадцать восемь смертей из тысяч пациентов за годы практики. Это называется статистика.', note: 'Сам по себе список не говорит, что смерть была неестественной. Цифры без сравнения он обернул в свою пользу.', cost: 4 } },
         hit: 'Она могла забыть. В горе люди не помнят разговоров.',
         note: 'Ей вскрытие никто не предлагал. Он говорит это не в первый раз.',
         miss: 'Так и было. Это есть в моих заметках.',

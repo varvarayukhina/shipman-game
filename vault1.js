@@ -2,8 +2,8 @@
    Названия и имена изменены, реплики и часть документов придуманы. Что факт, а что придумано, лежит в notes/SCRIPT-NOTES-2.md (в продакшен-пакет не входит). */
 window.V1 = {
   name: 'Глава 1', title: 'Шахта',
-  steps: ['cover', 'intro', 'desk', 'timeline', 'turn', 'end'],
-  img: { cover: 'img/night-street.jpg', intro: 'img/night-street.jpg', desk: 'img/case-desk.jpg', timeline: 'img/case-desk.jpg', turn: 'img/case-desk.jpg', end: 'img/night-street.jpg' },
+  steps: ['cover', 'intro', 'opener', 'desk', 'timeline', 'turn', 'end'],
+  img: { opener: 'img/vault-wall.jpg', cover: 'img/night-street.jpg', intro: 'img/night-street.jpg', desk: 'img/case-desk.jpg', timeline: 'img/case-desk.jpg', turn: 'img/case-desk.jpg', end: 'img/night-street.jpg' },
   startHours: 48,
   clock: { label: 'Часов до переплавки золота', missCost: 3 },
   minRead: 4,
@@ -16,6 +16,19 @@ window.V1 = {
       <h1>РЕАЛЬНОЕ ДЕЛО №2</h1>
       <p>Всё, что вы прочитаете, основано на настоящих документах. Имена и названия изменены.</p>
       <p>Ни одного выстрела. Ограбили хранилище, в котором никто не ждал взлома, а попались на мелочах. Угадаете дело до финала?</p>`,
+  },
+
+  opener: {
+    title: 'Первый осмотр. Подвал, 7.4.15, 8:50',
+    prompt: 'Снаружи следов взлома нет, внутри пролом в стене хранилища. С чего начать искать вход? Три отметки из протокола осмотра:',
+    options: [
+      { title: 'Входная дверь', text: 'Замок цел, следов отмычек нет.' },
+      { title: 'Запасной выход', text: 'Замок цел, следов взлома нет.' },
+      { title: 'Шахта лифта', text: 'В подвал не ходит с 1970-х, но створки вскрыты, в шахте свежие следы и верёвка.', ok: true },
+    ],
+    hit: 'Верно. Только здесь свежие следы: по шахте можно попасть в подвал в обход охраняемой лестницы.',
+    miss: 'Мимо: двери целы, их не вскрывали. Свежие следы только в шахте лифта.',
+    stamp: 'Зацепка найдена',
   },
 
   intro: {

@@ -18,6 +18,7 @@
     ch, step: CHS[ch].steps[0], hours,
     seen: new Set(), found: new Set(), round: 0, open: null, picks: [], log: [],
     placed: {}, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
+    opener: { pick: null, done: false, ok: false }, misses: 0, partial: [], deadline: null, closed: false, notice: '', noticeNext: '',
   });
   // Прогресс лежит в localStorage этого браузера: у каждого игрока свой, между устройствами не переносится.
   const KEY = GAME === '1' ? 'shipman-proto-v1' : `shipman-proto-v1-g${GAME}`;
@@ -31,7 +32,8 @@
       if (!raw) return null;
       const o = JSON.parse(raw, (k, v) => (v && !Array.isArray(v) && v.set ? new Set(v.set) : v));
       const c = CHS[o.ch];
-      return c && c.steps.includes(o.step) && o.round <= (c.interview || []).length ? o : null;
+      // старые сохранения без новых полей дополняем значениями по умолчанию
+      return c && c.steps.includes(o.step) && o.round <= (c.interview || []).length ? { ...blank(o.ch, o.hours), ...o } : null;
     } catch (e) { console.warn('progress not loaded:', e.message); return null; }
   };
   let S = load() || blank(0, CHS[0].startHours ?? START_HOURS);
@@ -50,7 +52,16 @@
   };
   const PAYWALL = false; // true: после главы 1 показывается экран «платно»; false: все главы открыты (версия для оценки)
   const gated = () => PAYWALL && !!C().gate && !hasAccess();
-  const total = (c) => (c.interview || []).filter((q) => !q.locked).length;
+  const total = (c) => (c.opener ? 1 : 0) + (c.interview || []).filter((q) => !q.locked).length;
+
+  // Таймер чтения («архив закрывается»). Дедлайн хранится временем, обновление страницы его не сбрасывает.
+  // «Без таймера» (доступность): кнопка на столе, выбор запоминается.
+  const NOTIMER = 'shipman-no-timer';
+  const noTimer = () => { try { return localStorage.getItem(NOTIMER) === '1'; } catch (e) { return false; } };
+  const left = () => Math.max(0, Math.ceil(((S.deadline || 0) - Date.now()) / 1000));
+  const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const timerOn = () => S.step === 'desk' && !!C().timed && !noTimer() && !S.closed;
+  const notice = () => (S.notice ? `<p class="notice" role="status">${S.notice}</p>` : '');
   const body = (d) => (typeof d.html === 'function' ? d.html(S) : d.html);
   const paper = (d) => `<article class="paper paper--${d.kind}">${body(d)}</article>`;
   const scene = (step, inner) => `<section class="scene" style="--bg:url(${C().img[step] || C().img.desk})">${inner}</section>`;
@@ -61,16 +72,17 @@
     <header class="bar">
       <span class="bar__item"><b>${c.name}</b><span class="bar__t">${c.title}</span></span>
       <span class="bar__item"><b>${c.clock.label}</b> <span class="num">${S.hours}</span> ч</span>
-      ${c.interview ? `<span class="bar__item"><b>Противоречий</b> <span class="num">${S.found.size}</span> из ${total(c)}</span>` : ''}
+      ${timerOn() && S.deadline ? `<span class="bar__item"><b>${c.timedLabel}</b> <span class="num" id="countdown" role="timer">${fmt(left())}</span></span>` : ''}
+      ${c.interview || c.opener ? `<span class="bar__item"><b>Противоречий</b> <span class="num">${S.found.size}</span> из ${total(c)}</span>` : ''}
     </header>`;
   };
 
-  const chip = (id, attrs = '') => {
+  const chip = (id, attrs = '', note = '') => {
     const d = C().documents[id];
     return `
     <button class="chip chip--${d.kind}" data-id="${id}" ${attrs}>
       <span class="chip__t">${d.title}</span>
-      <span class="chip__s">${d.short}</span>
+      <span class="chip__s">${note || d.short}</span>
     </button>`;
   };
 
@@ -94,6 +106,32 @@
         <button class="btn" data-act="forward">Разбор дела</button>
       </div>`),
 
+    opener: () => {
+      const O = C().opener;
+      const st = S.opener;
+      return scene('opener', `
+        ${bar()}
+        <div class="room">
+          <article class="paper paper--transcript" aria-label="Первый вопрос">
+            <h2>${O.title}</h2>
+            <p class="sr-only" role="status">${S.say || ''}</p>
+            <p>${O.prompt}</p>
+            ${st.done ? `<p class="mark"><span class="stamp">${st.ok ? (O.stamp || 'Противоречие зафиксировано') : 'Мимо'}</span></p><p>${st.ok ? O.hit : O.miss}</p>` : ''}
+          </article>
+          <div class="tray">
+            <p class="tray__t">Выбери одну бумагу из папки</p>
+            <div class="tray__chips">
+              ${O.options.map((o, i) => `<button class="chip" data-act="opick" data-i="${i}" aria-pressed="${st.pick === i}" ${st.done ? 'disabled' : ''}><span class="chip__t">${o.title}</span><span class="chip__s">${o.text}</span></button>`).join('')}
+            </div>
+          </div>
+        </div>
+        <footer class="dock">
+          ${st.done
+            ? '<button class="btn" data-act="forward">Дальше</button>'
+            : `<button class="btn" data-act="oanswer" ${st.pick === null ? 'disabled' : ''}>Ответить${st.pick === null ? '' : `: ${O.options[st.pick].title}`}</button>`}
+        </footer>`);
+    },
+
     intro: () => scene('intro', `
       <div class="stage stage--center">
         <article class="paper paper--typed paper--memo">${C().intro.html}</article>
@@ -116,6 +154,7 @@
         </div>
         <footer class="dock">
           <button class="btn" data-act="forward" ${ready ? '' : 'disabled'}>${c.deskNext}${ready ? '' : `: прочитано ${S.seen.size} из ${c.minRead}`}</button>
+          ${timerOn() ? '<button class="btn btn--quiet" data-act="notimer">Без таймера</button>' : ''}
         </footer>`);
     },
 
@@ -126,6 +165,7 @@
       const ready = T.slots.every((s, i) => s.locked || S.placed[i]);
       return scene('timeline', `
         ${bar()}
+        ${notice()}
         <div class="tl">
           <article class="paper paper--form" aria-label="${T.title}">
             <h2>${T.title}</h2>
@@ -162,6 +202,7 @@
       const verdict = (r, on) => (r.hit ? (on ? 'Верно' : 'Пропущена') : (on ? `Лишняя, −${A.missCost} ч` : A.none));
       return scene('audit', `
         ${bar()}
+        ${notice()}
         <div class="audit">
           <article class="paper paper--printout">
             <h2>${A.title}</h2>
@@ -195,8 +236,10 @@
       const label = q.multi
         ? `Предъявить${n ? ` (${n})` : ''}`
         : `Предъявить${n ? `: ${c.documents[S.picks[0]].title}` : ''}`;
+      const max = c.maxMisses || 3;
       return scene('interview', `
         ${bar()}
+        ${notice()}
         <div class="room">
           <article class="paper paper--transcript" aria-label="Протокол допроса">
             <h2>${c.transcriptTitle}</h2>
@@ -207,8 +250,8 @@
           <div class="tray">
             ${q.locked
               ? `<p class="tray__t">Вопрос ${S.round + 1} из ${c.interview.length}</p><p class="tray__p">${q.lockedNote}</p>`
-              : `<p class="tray__t">${q.prompt || 'Что предъявляешь?'} Вопрос ${S.round + 1} из ${c.interview.length}</p>
-                 <div class="tray__chips">${ids.map((id) => chip(id, `data-act="pick" aria-pressed="${S.picks.includes(id)}"`)).join('')}</div>`}
+              : `<p class="tray__t">${q.prompt || 'Что предъявляешь?'} Вопрос ${S.round + 1} из ${c.interview.length}. Промахов: ${S.misses} из ${max}.</p>
+                 <div class="tray__chips">${ids.map((id) => { const lost = c.timed && S.closed && !S.seen.has(id); return chip(id, lost ? 'disabled' : `data-act="pick" aria-pressed="${S.picks.includes(id)}"`, lost ? 'не успели прочитать' : ''); }).join('')}</div>`}
           </div>
         </div>
         <footer class="dock">
@@ -221,6 +264,7 @@
 
     turn: () => scene('turn', `
       ${bar()}
+      ${notice()}
       <div class="stage stage--center">
         ${paper(C().turn)}
         <button class="btn" data-act="forward">${C().turn.button}</button>
@@ -247,10 +291,11 @@
     },
   };
 
-  const go = (step) => { S.step = step; render(); window.scrollTo(0, 0); };
+  const go = (step) => { S.step = step; S.notice = S.noticeNext || ''; S.noticeNext = ''; render(); window.scrollTo(0, 0); };
   const forward = () => { const st = C().steps; go(st[st.indexOf(S.step) + 1]); };
 
   function render() {
+    if (timerOn() && !S.deadline) S.deadline = Date.now() + C().timed * 1000;
     app.innerHTML = named(views[S.step]());
     const t = document.querySelector('.paper--transcript');
     if (t) t.scrollTop = t.scrollHeight;
@@ -259,7 +304,32 @@
 
   const toView = (sel) => { if (matchMedia('(max-width: 899px)').matches) document.querySelector(sel)?.scrollIntoView({ block: 'start' }); };
   const reply = (name, text, who) => S.log.push({ name, text, who });
-  const next = () => { S.round += 1; S.picks = []; S.round >= C().interview.length ? forward() : render(); };
+  // Допрос обрывается, если вышли часы или набралось слишком много промахов: ошибки имеют цену.
+  const cutWhy = () => {
+    const c = C();
+    if (S.misses >= (c.maxMisses || 3)) return c.cut?.misses || 'Адвокат прекращает допрос: слишком много промахов. Оставшиеся вопросы не заданы.';
+    if (S.hours <= 0) return c.clock.out || 'Время вышло. Допрос окончен.';
+    return null;
+  };
+  const next = () => {
+    const len = C().interview.length;
+    S.round += 1; S.picks = [];
+    if (S.round < len) { const why = cutWhy(); if (why) { S.noticeNext = why; S.round = len; } }
+    S.round >= len ? forward() : render();
+  };
+  function timeUp() {
+    const c = C();
+    S.closed = true; S.deadline = null;
+    S.noticeNext = `${c.timedOut} Прочитано ${S.seen.size} из ${Object.keys(c.documents).length}. Непрочитанное на допросе недоступно.`;
+    forward();
+  }
+  setInterval(() => {
+    if (!timerOn() || !S.deadline) return;
+    const l = left();
+    const el = document.getElementById('countdown');
+    if (el) el.textContent = fmt(l);
+    if (l <= 0) timeUp();
+  }, 1000);
   const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
 
   const acts = {
@@ -268,6 +338,16 @@
       S.open = el.dataset.id; S.seen.add(S.open); render();
       if (matchMedia('(max-width: 899px)').matches) document.querySelector('.reader').scrollIntoView({ block: 'start' });
     },
+    opick: (el) => { S.opener.pick = +el.dataset.i; render(); },
+    oanswer: () => {
+      const O = C().opener;
+      const ok = !!O.options[S.opener.pick].ok;
+      S.opener.done = true; S.opener.ok = ok;
+      if (ok) S.found.add('o'); else S.hours = Math.max(0, S.hours - (O.missCost ?? 1));
+      S.say = ok ? 'Верно.' : 'Мимо.';
+      render();
+    },
+    notimer: () => { try { localStorage.setItem(NOTIMER, '1'); } catch (e) { console.warn(e.message); } S.deadline = null; render(); },
     card: (el) => { S.picks = S.picks[0] === el.dataset.id ? [] : [el.dataset.id]; render(); if (S.picks[0]) toView('.slots'); },
     slot: (el) => {
       const T = C().timeline;
@@ -300,20 +380,37 @@
     present: () => {
       const c = C();
       const q = c.interview[S.round];
+      const id = S.picks[0];
       reply(c.suspect, q.say, 'sh');
-      reply('Следователь', `Предъявляю: ${S.picks.map((id) => c.documents[id].title).join(', ')}.`, 'cop');
-      const ok = q.multi ? sameSet(S.picks, q.needs) : q.needs.includes(S.picks[0]);
+      reply('Следователь', `Предъявляю: ${S.picks.map((x) => c.documents[x].title).join(', ')}.`, 'cop');
+      const ok = q.multi ? sameSet(S.picks, q.needs) : q.needs.includes(id);
+      const trap = !ok && !q.multi && q.traps?.[id];
+      const part = !ok && !q.multi && q.partial?.[id] && !S.partial.includes(`${S.round}:${id}`);
+      if (part) {
+        // почти попал: вопрос остаётся открытым, цены нет, второй раз тот же документ уже промах
+        S.partial.push(`${S.round}:${id}`);
+        reply(c.suspect, q.partial[id].say, 'sh');
+        reply('', q.partial[id].note, 'note');
+        S.say = 'Почти. Можно предъявить ещё один документ.';
+        S.picks = [];
+        render();
+        return;
+      }
       if (ok) {
         S.found.add(S.round);
         reply(c.suspect, q.hit, 'sh');
         if (q.note) reply('', q.note, 'note');
         reply('', q.stamp || 'Противоречие зафиксировано', 'mark');
+        S.say = 'Противоречие зафиксировано.';
       } else {
-        S.hours = Math.max(0, S.hours - c.clock.missCost);
-        reply(c.suspect, q.miss, 'sh');
-        reply('', `Мимо. Потеряно ${c.clock.missCost} ч.`, 'loss');
+        const cost = trap ? (trap.cost ?? 4) : c.clock.missCost;
+        S.hours = Math.max(0, S.hours - cost);
+        S.misses += 1;
+        reply(c.suspect, trap ? trap.say : q.miss, 'sh');
+        if (trap && trap.note) reply('', trap.note, 'note');
+        reply('', trap ? `Бумага сработала против вас. Потеряно ${cost} ч.` : `Мимо. Потеряно ${cost} ч.`, 'loss');
+        S.say = `${trap ? 'Бумага сработала против вас.' : 'Мимо.'} Потеряно ${cost} ч.`;
       }
-      S.say = ok ? 'Противоречие зафиксировано.' : `Мимо. Потеряно ${c.clock.missCost} ч.`;
       next();
     },
     skip: () => {

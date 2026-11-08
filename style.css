@@ -267,3 +267,7 @@ a.btn { display: inline-block; text-decoration: none; }
   .paper--transcript { max-height: calc(100dvh - 150px); }
   .tray { max-height: calc(100dvh - 150px); overflow: auto; }
 }
+
+/* первый вопрос, уведомления и недоступные документы */
+.notice { margin: 0; padding: 10px max(16px, env(safe-area-inset-left)); background: #f7e7a6; color: var(--ink); font-weight: 700; border-bottom: 2px solid var(--ink); }
+.chip:disabled { cursor: not-allowed; background: #cfc8b8; box-shadow: none; transform: none; }

@@ -21,7 +21,7 @@
     steps: ['intro', 'desk', 'audit', 'interview', 'turn', 'end', 'reveal', 'solution'],
     img: { intro: 'img/night-street.jpg', desk: 'img/case-desk.jpg', audit: 'img/case-desk.jpg', interview: 'img/interview-room.jpg', turn: 'img/headstone.jpg', end: 'img/vault-wall.jpg', reveal: 'img/night-street.jpg', solution: 'img/vault-wall.jpg' },
     endNext: 'Чьё это было дело?',
-    clock: { label: 'Часов до переплавки золота', missCost: 3 },
+    clock: { label: 'Часов до переплавки золота', missCost: 3, out: 'Золото уже в тигле. Допрос не имеет смысла, остальные вопросы не заданы.' },
     minRead: 4,
     suspect: 'Брэнт',
     transcriptTitle: 'Протокол допроса. Комната 2, 20.5.15',
@@ -98,6 +98,8 @@
       {
         say: 'Деньги, часы и украшения в моём доме? Это сбережения за всю жизнь. Мне семьдесят четыре года.',
         needs: ['search'],
+        partial: { seized: { say: 'Телефоны и рации? У каждого есть телефон.', note: 'Список изъятого общий. Нужно, что нашли именно у него дома.' } },
+        traps: { phones: { say: 'Телефоны были дома, как я и говорил. Это доказывает, что я не звонил.', note: 'Тишина в эфире была в апреле. Сейчас вопрос про то, что нашли при обыске.', cost: 4 } },
         hit: 'Старики копят наличные. Не запрещено.',
         note: 'У него дома счётчик банкнот. У остальных маски, комбинезоны, перчатки и книга «Криминалистика для чайников».',
         miss: 'Это мои личные вещи.',

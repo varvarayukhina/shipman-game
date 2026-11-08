@@ -29,7 +29,7 @@
     name: 'Глава 3', title: 'Журнал правок',
     steps: ['intro', 'desk', 'audit', 'interview', 'turn', 'end'],
     img: { intro: 'img/surgery-office.jpg', desk: 'img/case-desk.jpg', audit: 'img/surgery-office.jpg', interview: 'img/interview-room.jpg', turn: 'img/surgery-office.jpg', end: 'img/cemetery-tent.jpg' },
-    clock: { label: 'Срок задержания', missCost: 3 },
+    clock: { label: 'Срок задержания', missCost: 3, out: 'Срок задержания истёк. Адвокат уводит его из комнаты, остальные вопросы не заданы.' },
     minRead: 4,
     suspect: '⟦имя⟧',
     transcriptTitle: 'Протокол допроса, продолжение. Комната 2, 7.9.98, 17:10',
@@ -121,6 +121,7 @@
       {
         say: 'Любой сотрудник мог войти под общим логином. Это ничего не доказывает.',
         needs: ['staff'],
+        traps: { tox: { say: 'Морфин, морфин. Вы всё время возвращаетесь к одному. Какое отношение он имеет к логину?', note: 'Токсикология отвечает на вопрос «чем», а не «кто мог внести записи».', cost: 4 } },
         hit: 'Он молчит. Потом: «Допустим. Это ещё не значит, что я сделал ей укол».',
         note: 'После обеда в его кабинет заходил только он сам.',
         miss: 'Логин общий. Я это уже сказал.',
