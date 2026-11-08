@@ -1,10 +1,48 @@
 /* Движок: главы идут цепочкой, каждая задаёт свои шаги (steps). Содержание дела лежит в chapter1.js ... chapter3.js. */
 (() => {
   // Две игры (дела): ?game=2 открывает вторую. У каждой свой ключ сохранения.
-  const GAMES = { 1: [window.CH1, window.CH2, window.CH3, window.CH4], 2: [window.V1, window.V2, window.V3, window.V4] };
-  const GAME = GAMES[new URLSearchParams(location.search).get('game')] ? new URLSearchParams(location.search).get('game') : '1';
-  const CHS = GAMES[GAME];
+  const GAMES = {
+    1: [window.CH1, window.CH2, window.CH3, window.CH4],
+    2: [window.V1, window.V2, window.V3, window.V4],
+    3: [window.W1, window.W2, window.W3, window.W4].filter(Boolean),
+  };
   const app = document.getElementById('app');
+  const ASKED = new URLSearchParams(location.search).get('game');
+  const saveKey = (n) => (n === '1' ? 'shipman-proto-v1' : `shipman-proto-v1-g${n}`);
+
+  // Каталог: главная страница без ?game. Прогресс читаем из localStorage каждой игры.
+  function catalog() {
+    const prog = (n) => { try { const raw = localStorage.getItem(saveKey(n)); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } };
+    const cards = Object.keys(GAMES).filter((n) => GAMES[n][0] && GAMES[n][0].meta).map((n) => {
+      const m = GAMES[n][0].meta;
+      const st = prog(n);
+      const label = !st ? 'Начать' : st.step === 'solution' ? 'Пройдено. Сыграть снова' : `Продолжить: глава ${st.ch + 1}`;
+      return `
+        <article class="case">
+          <img src="${m.img}" width="1672" height="941" alt="${m.alt}">
+          <div class="case__body">
+            <h2>Дело №${n}. ${m.title}</h2>
+            <p>${m.teaser}</p>
+            <p class="case__meta">${m.meta}</p>
+            <a class="btn" href="?game=${n}">${label}</a>
+          </div>
+        </article>`;
+    }).join('');
+    document.title = 'Дела. Игры-расследования';
+    app.innerHTML = `
+      <section class="scene" style="--bg:url(img/case-desk.jpg)">
+        <div class="catalog">
+          <header class="paper paper--typed paper--memo catalog__head">
+            <h1>ДЕЛА</h1>
+            <p>Игры-расследования по мотивам реальных закрытых дел. Читаешь документы, ловишь противоречия, собираешь доказательства. Имена и названия изменены, а какое это было дело, откроется в финале. Угадаешь раньше?</p>
+          </header>
+          <div class="cases">${cards}</div>
+        </div>
+      </section>`;
+  }
+  if (!GAMES[ASKED]) { catalog(); return; }
+  const GAME = ASKED;
+  const CHS = GAMES[GAME];
   const START_HOURS = 24;
 
   // Имя врача скрыто до финала. В текстах глав стоят метки ⟦имя⟧ и ⟦полное⟧ (к метке можно дописывать падежное окончание).
@@ -18,10 +56,10 @@
     ch, step: CHS[ch].steps[0], hours,
     seen: new Set(), found: new Set(), round: 0, open: null, picks: [], log: [],
     placed: {}, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
-    opener: { pick: null, done: false, ok: false }, misses: 0, partial: [], deadline: null, closed: false, notice: '', noticeNext: '',
+    opener: { pick: null, done: false, ok: false }, choice: { pick: null, done: false, ok: false }, lab: { phase: 'tests', run: [], pick: [], done: false, ok: false }, misses: 0, partial: [], deadline: null, closed: false, notice: '', noticeNext: '',
   });
   // Прогресс лежит в localStorage этого браузера: у каждого игрока свой, между устройствами не переносится.
-  const KEY = GAME === '1' ? 'shipman-proto-v1' : `shipman-proto-v1-g${GAME}`;
+  const KEY = saveKey(GAME);
   const save = () => {
     try { localStorage.setItem(KEY, JSON.stringify(S, (k, v) => (v instanceof Set ? { set: [...v] } : v))); }
     catch (e) { console.warn('progress not saved:', e.message); }
@@ -52,7 +90,8 @@
   };
   const PAYWALL = false; // true: после главы 1 показывается экран «платно»; false: все главы открыты (версия для оценки)
   const gated = () => PAYWALL && !!C().gate && !hasAccess();
-  const total = (c) => (c.opener ? 1 : 0) + (c.interview || []).filter((q) => !q.locked).length;
+  const total = (c) => (c.opener ? 1 : 0) + (c.choice ? 1 : 0) + (c.lab ? 1 : 0) + (c.interview || []).filter((q) => !q.locked).length;
+  const unit = () => C().clock.unit || 'ч';
 
   // Таймер чтения («архив закрывается»). Дедлайн хранится временем, обновление страницы его не сбрасывает.
   // «Без таймера» (доступность): кнопка на столе, выбор запоминается.
@@ -71,9 +110,9 @@
     return `
     <header class="bar">
       <span class="bar__item"><b>${c.name}</b><span class="bar__t">${c.title}</span></span>
-      <span class="bar__item"><b>${c.clock.label}</b> <span class="num">${S.hours}</span> ч</span>
+      <span class="bar__item"><b>${c.clock.label}</b> <span class="num">${S.hours}</span> ${unit()}</span>
       ${timerOn() && S.deadline ? `<span class="bar__item"><b>${c.timedLabel}</b> <span class="num" id="countdown" role="timer">${fmt(left())}</span></span>` : ''}
-      ${c.interview || c.opener ? `<span class="bar__item"><b>Противоречий</b> <span class="num">${S.found.size}</span> из ${total(c)}</span>` : ''}
+      ${c.interview || c.opener || c.choice || c.lab ? `<span class="bar__item"><b>${c.scoreLabel || 'Противоречий'}</b> <span class="num">${S.found.size}</span> из ${total(c)}</span>` : ''}
     </header>`;
   };
 
@@ -98,6 +137,7 @@
       <div class="stage stage--center">
         <article class="paper paper--typed paper--memo">${C().cover.html}</article>
         <button class="btn" data-act="forward">${C().cover.button}</button>
+        <a class="btn btn--quiet" href="./">Все дела</a>
       </div>`),
 
     reveal: () => scene('reveal', `
@@ -129,6 +169,66 @@
           ${st.done
             ? '<button class="btn" data-act="forward">Дальше</button>'
             : `<button class="btn" data-act="oanswer" ${st.pick === null ? 'disabled' : ''}>Ответить${st.pick === null ? '' : `: ${O.options[st.pick].title}`}</button>`}
+        </footer>`);
+    },
+
+    choice: () => {
+      const K = C().choice;
+      const st = S.choice;
+      const o = st.pick === null ? null : K.options[st.pick];
+      return scene('choice', `
+        ${bar()}
+        ${notice()}
+        <div class="room">
+          <article class="paper paper--transcript" aria-label="${K.title}">
+            <h2>${K.title}</h2>
+            <p class="sr-only" role="status">${S.say || ''}</p>
+            <p>${K.prompt}</p>
+            ${st.done ? `<p class="mark"><span class="stamp">${o.ok ? (K.stamp || 'Верный ход') : (K.badStamp || 'Не сработало')}</span></p><p>${o.out}</p>` : ''}
+          </article>
+          <div class="tray">
+            <p class="tray__t">${K.ask || 'Выбери, как поступить'}</p>
+            <div class="tray__chips">
+              ${K.options.map((x, i) => `<button class="chip" data-act="ckpick" data-i="${i}" aria-pressed="${st.pick === i}" ${st.done ? 'disabled' : ''}><span class="chip__t">${x.title}</span><span class="chip__s">${x.text}</span></button>`).join('')}
+            </div>
+          </div>
+        </div>
+        <footer class="dock">
+          ${st.done
+            ? '<button class="btn" data-act="forward">Дальше</button>'
+            : `<button class="btn" data-act="ckanswer" ${st.pick === null ? 'disabled' : ''}>Решить${st.pick === null ? '' : `: ${K.options[st.pick].title}`}</button>`}
+        </footer>`);
+    },
+
+    lab: () => {
+      const L = C().lab;
+      const st = S.lab;
+      const ran = L.tests.filter((t) => st.run.includes(t.id));
+      const basis = st.phase === 'basis';
+      return scene('lab', `
+        ${bar()}
+        ${notice()}
+        <div class="room">
+          <article class="paper paper--printout" aria-label="${L.title}">
+            <h2>${L.title}</h2>
+            <p class="sr-only" role="status">${S.say || ''}</p>
+            <p>${st.done ? (st.ok ? L.okText : L.badText) : (basis ? L.basisHint : L.hint)}</p>
+            ${ran.length ? `<table class="log"><caption>Журнал лаборатории</caption><thead><tr><th>Проба</th><th>Результат</th></tr></thead><tbody>${ran.map((t) => `<tr${st.done && st.pick.includes(t.id) ? ' class="flag"' : ''}><td data-l="Проба">${t.name}</td><td data-l="Результат">${t.result}</td></tr>`).join('')}</tbody></table>` : '<p>Журнал пока пуст.</p>'}
+          </article>
+          <div class="tray">
+            ${st.done ? '' : basis
+              ? `<p class="tray__t">Что лежит в основе заключения? Выбери ${L.need}. Выбрано: ${st.pick.length}.</p>
+                 <div class="tray__chips">${ran.map((t) => `<button class="chip" data-act="labpick" data-id="${t.id}" aria-pressed="${st.pick.includes(t.id)}"><span class="chip__t">${t.name}</span><span class="chip__s">${t.short}</span></button>`).join('')}</div>`
+              : `<p class="tray__t">Пробы. Осталось ${S.hours} ${unit()}.</p>
+                 <div class="tray__chips">${L.tests.map((t) => { const used = st.run.includes(t.id); const cant = !used && t.cost > S.hours; return `<button class="chip" data-act="labrun" data-id="${t.id}" ${used || cant ? 'disabled' : ''}><span class="chip__t">${t.name}</span><span class="chip__s">${used ? 'проведена' : cant ? 'не хватает времени' : `${t.cost} ${unit()}`}</span></button>`; }).join('')}</div>`}
+          </div>
+        </div>
+        <footer class="dock">
+          ${st.done
+            ? '<button class="btn" data-act="forward">Дальше</button>'
+            : basis
+              ? `<button class="btn" data-act="labsubmit" ${st.pick.length === L.need ? '' : 'disabled'}>Подписать заключение</button>`
+              : `<button class="btn" data-act="labbasis" ${st.run.length ? '' : 'disabled'}>${st.run.length ? 'К заключению' : 'Сначала проведи пробу'}</button>`}
         </footer>`);
     },
 
@@ -199,7 +299,7 @@
     audit: () => {
       const A = C().audit;
       const done = S.auditDone;
-      const verdict = (r, on) => (r.hit ? (on ? 'Верно' : 'Пропущена') : (on ? `Лишняя, −${A.missCost} ч` : A.none));
+      const verdict = (r, on) => (r.hit ? (on ? 'Верно' : 'Пропущена') : (on ? `Лишняя, −${A.missCost} ${unit()}` : A.none));
       return scene('audit', `
         ${bar()}
         ${notice()}
@@ -218,7 +318,7 @@
                 }).join('')}
               </tbody>
             </table>
-            ${done ? `<p class="audit__res" role="status">${A.okLine(S.audit.ok, S.audit.total)}${S.audit.wrong ? ` Лишних отметок: ${S.audit.wrong}, потеряно ${S.audit.wrong * A.missCost} ч.` : ''}</p>` : ''}
+            ${done ? `<p class="audit__res" role="status">${A.okLine(S.audit.ok, S.audit.total)}${S.audit.wrong ? ` Лишних отметок: ${S.audit.wrong}, потеряно ${S.audit.wrong * A.missCost} ${unit()}.` : ''}</p>` : ''}
           </article>
         </div>
         <footer class="dock">
@@ -274,6 +374,7 @@
       <div class="stage stage--center">
         <article class="paper paper--typed paper--memo">${C().solution.html}</article>
         ${C().solution.next ? `<a class="btn" href="${C().solution.next.href}">${C().solution.next.label}</a>` : ''}
+        <a class="btn btn--quiet" href="./">Все дела</a>
         <button class="btn btn--quiet" data-act="restart">Сыграть сначала</button>
       </div>`),
 
@@ -348,6 +449,39 @@
       render();
     },
     notimer: () => { try { localStorage.setItem(NOTIMER, '1'); } catch (e) { console.warn(e.message); } S.deadline = null; render(); },
+    ckpick: (el) => { S.choice.pick = +el.dataset.i; render(); },
+    ckanswer: () => {
+      const K = C().choice;
+      const o = K.options[S.choice.pick];
+      S.choice.done = true; S.choice.ok = !!o.ok;
+      if (o.ok) S.found.add('k');
+      S.hours = Math.max(0, S.hours - (o.cost ?? (o.ok ? 0 : K.missCost ?? 2)));
+      S.say = o.ok ? 'Верный ход.' : 'Не сработало.';
+      render();
+    },
+    labrun: (el) => {
+      const t = C().lab.tests.find((x) => x.id === el.dataset.id);
+      if (!t || S.lab.run.includes(t.id) || t.cost > S.hours) return;
+      S.lab.run.push(t.id); S.hours -= t.cost;
+      S.say = `Проба проведена, потрачено ${t.cost} ${unit()}.`;
+      render();
+    },
+    labbasis: () => { S.lab.phase = 'basis'; S.lab.pick = []; render(); },
+    labpick: (el) => {
+      const id = el.dataset.id; const need = C().lab.need;
+      if (S.lab.pick.includes(id)) S.lab.pick = S.lab.pick.filter((x) => x !== id);
+      else if (S.lab.pick.length < need) S.lab.pick = [...S.lab.pick, id];
+      render();
+    },
+    labsubmit: () => {
+      const L = C().lab;
+      const picks = S.lab.pick.map((id) => L.tests.find((t) => t.id === id));
+      const ok = picks.length === L.need && picks.every((t) => t.proof);
+      S.lab.done = true; S.lab.ok = ok;
+      if (ok) S.found.add('l'); else S.hours = Math.max(0, S.hours - (L.missCost ?? 3));
+      S.say = ok ? 'Заключение принято.' : 'Заключение оспорено.';
+      render();
+    },
     card: (el) => { S.picks = S.picks[0] === el.dataset.id ? [] : [el.dataset.id]; render(); if (S.picks[0]) toView('.slots'); },
     slot: (el) => {
       const T = C().timeline;
@@ -355,7 +489,7 @@
       const ev = T.events.find((e) => e.id === S.picks[0]);
       if (!ev) return;
       if (ev.slot === i) { S.placed[i] = ev.id; S.tlMsg = `Верно. Источник: ${ev.src}.`; }
-      else { S.hours = Math.max(0, S.hours - T.missCost); S.tlMsg = `Мимо. Потеряно ${T.missCost} ч.`; }
+      else { S.hours = Math.max(0, S.hours - T.missCost); S.tlMsg = `Мимо. Потеряно ${T.missCost} ${unit()}.`; }
       S.picks = [];
       if (T.slots.every((s, k) => s.locked || S.placed[k])) S.tlMsg = T.done;
       render();
@@ -408,8 +542,8 @@
         S.misses += 1;
         reply(c.suspect, trap ? trap.say : q.miss, 'sh');
         if (trap && trap.note) reply('', trap.note, 'note');
-        reply('', trap ? `Бумага сработала против вас. Потеряно ${cost} ч.` : `Мимо. Потеряно ${cost} ч.`, 'loss');
-        S.say = `${trap ? 'Бумага сработала против вас.' : 'Мимо.'} Потеряно ${cost} ч.`;
+        reply('', trap ? `Бумага сработала против вас. Потеряно ${cost} ${unit()}.` : `Мимо. Потеряно ${cost} ${unit()}.`, 'loss');
+        S.say = `${trap ? 'Бумага сработала против вас.' : 'Мимо.'} Потеряно ${cost} ${unit()}.`;
       }
       next();
     },

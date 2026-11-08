@@ -2,6 +2,7 @@
    Что факт, а что придумано для игры, лежит в notes/SCRIPT-NOTES.md (в продакшен-пакет не входит). */
 window.CH1 = {
   name: 'Глава 1', title: 'Завещание',
+  meta: { title: 'Завещание', img: 'img/street-1998.jpg', alt: 'Дождливая улица английского городка, мокрая машина у кирпичного дома', teaser: 'Пожилая пациентка умерла, и всё её имущество по завещанию получил врач. Её дочь юрист и не верит бумаге.', meta: '4 главы. Глава 1 бесплатная.' },
   steps: ['cover', 'intro', 'opener', 'desk', 'interview', 'turn', 'end'],
   img: { opener: 'img/interview-room.jpg', cover: 'img/street-1998.jpg', intro: 'img/street-1998.jpg', desk: 'img/case-desk.jpg', interview: 'img/interview-room.jpg', turn: 'img/case-desk.jpg', end: 'img/case-desk.jpg' },
   deskNext: 'Вызвать на допрос',
