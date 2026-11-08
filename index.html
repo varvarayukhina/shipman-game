@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Дело (прототип, 4 главы)</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="app" aria-live="polite"></main>
+
+<!-- шероховатость машинописи и бумажное зерно: один раз, переиспользуется в CSS -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <filter id="ink" x="-2%" y="-2%" width="104%" height="104%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="1.1" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+
+<script src="chapter1.js"></script>
+<script src="chapter2.js"></script>
+<script src="chapter3.js"></script>
+<script src="chapter4.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
