@@ -249,3 +249,7 @@ button { font: inherit; color: inherit; }
 .paper ol { margin: 0 0 14px; padding-left: 1.6em; }
 .paper li { margin-bottom: 8px; }
 .paper--memo h2 { margin-top: 22px; }
+
+/* «Это было на самом деле» в конце главы */
+.paper .real { margin: 18px 0 0; }
+.paper .real .stamp { display: block; width: fit-content; margin: 0 0 10px; }

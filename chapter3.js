@@ -31,7 +31,7 @@
     img: { intro: 'img/surgery-office.png', desk: 'img/case-desk.png', audit: 'img/surgery-office.png', interview: 'img/interview-room.png', turn: 'img/surgery-office.png', end: 'img/cemetery-tent.png' },
     clock: { label: 'Срок задержания', missCost: 3 },
     minRead: 4,
-    suspect: 'Шипман',
+    suspect: '⟦имя⟧',
     transcriptTitle: 'Протокол допроса, продолжение. Комната 2, 7.9.98, 17:10',
     deskHint: 'Эксперт привёз копию сервера. Программа клиники помнит, когда на самом деле сохранена каждая строка. Прочти, что про это известно, и разбери журнал.',
     deskNext: 'К журналу правок',
@@ -157,6 +157,7 @@
     },
 
     end: {
+      real: 'Программа клиники действительно хранила время каждой записи с октября 1996 года. По журналу полиция нашла карты, подделанные в день смерти пациентов.',
       html: (found, total, hours, S) => `
         <h1>КОНЕЦ ГЛАВЫ 3</h1>
         <p>Противоречий найдено: ${found} из ${total}. В журнале найдено строк: ${S.audit.ok} из ${S.audit.total}. До конца срока задержания осталось ${hours} ч.</p>

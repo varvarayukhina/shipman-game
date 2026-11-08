@@ -4,8 +4,15 @@
   const app = document.getElementById('app');
   const START_HOURS = 24;
 
+  // Имя врача скрыто до финала. В текстах глав стоят метки ⟦имя⟧ и ⟦полное⟧ (к метке можно дописывать падежное окончание).
+  // ?name=real показывает настоящее имя везде.
+  const REAL = new URLSearchParams(location.search).get('name') === 'real';
+  const NAME = REAL ? 'Шипман' : 'Саймон';
+  const FULL = REAL ? 'Гарольд Шипман' : 'Говард Саймон';
+  const named = (html) => html.replaceAll('⟦имя⟧', NAME).replaceAll('⟦полное⟧', FULL);
+
   const blank = (ch, hours) => ({
-    ch, step: 'intro', hours,
+    ch, step: CHS[ch].steps[0], hours,
     seen: new Set(), found: new Set(), round: 0, open: null, picks: [], log: [],
     placed: {}, tlMsg: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
   });
@@ -72,6 +79,18 @@
   }).join('');
 
   const views = {
+    cover: () => scene('cover', `
+      <div class="stage stage--center">
+        <article class="paper paper--typed paper--memo">${C().cover.html}</article>
+        <button class="btn" data-act="forward">${C().cover.button}</button>
+      </div>`),
+
+    reveal: () => scene('reveal', `
+      <div class="stage stage--center">
+        <article class="paper paper--typed paper--memo">${C().reveal.html}</article>
+        <button class="btn" data-act="forward">Разбор дела</button>
+      </div>`),
+
     intro: () => scene('intro', `
       <div class="stage stage--center">
         <article class="paper paper--typed paper--memo">${C().intro.html}</article>
@@ -214,10 +233,10 @@
       const next = CHS[S.ch + 1];
       return scene('end', `
         <div class="stage stage--center">
-          <article class="paper paper--typed paper--memo">${c.end.html(S.found.size, total(c), S.hours, S)}</article>
+          <article class="paper paper--typed paper--memo">${c.end.html(S.found.size, total(c), S.hours, S)}${c.end.real ? `<p class="real"><span class="stamp">Это было на самом деле</span> ${c.end.real}</p>` : ''}</article>
           ${next && gated() ? `<article class="paper paper--form paywall"><h2>${c.gate.title}</h2>${c.gate.html}</article>` : ''}
           ${next && !gated() ? `<button class="btn" data-act="nextch">Дальше: ${next.name}, «${next.title}»</button>` : ''}
-          ${!next && c.solution ? '<button class="btn" data-act="forward">Разбор дела</button>' : ''}
+          ${!next && c.solution ? `<button class="btn" data-act="forward">${c.endNext}</button>` : ''}
           <button class="btn btn--quiet" data-act="restart">Сыграть сначала</button>
         </div>`);
     },
@@ -227,7 +246,7 @@
   const forward = () => { const st = C().steps; go(st[st.indexOf(S.step) + 1]); };
 
   function render() {
-    app.innerHTML = views[S.step]();
+    app.innerHTML = named(views[S.step]());
     const t = document.querySelector('.paper--transcript');
     if (t) t.scrollTop = t.scrollHeight;
     save();
