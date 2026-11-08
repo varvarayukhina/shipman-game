@@ -27,6 +27,18 @@
   let S = load() || blank(0, START_HOURS);
 
   const C = () => CHS[S.ch];
+
+  // Платная часть: пока оплаты нет, полный доступ включается ссылкой ?full=1 (?full=0 выключает). Это только вид, не защита.
+  const ACCESS = 'shipman-proto-access';
+  const hasAccess = () => {
+    try {
+      const q = new URLSearchParams(location.search).get('full');
+      if (q === '1') localStorage.setItem(ACCESS, '1');
+      if (q === '0') localStorage.removeItem(ACCESS);
+      return localStorage.getItem(ACCESS) === '1';
+    } catch (e) { console.warn('access flag unavailable:', e.message); return false; }
+  };
+  const gated = () => !!C().gate && !hasAccess();
   const total = (c) => c.interview.filter((q) => !q.locked).length;
   const body = (d) => (typeof d.html === 'function' ? d.html(S) : d.html);
   const paper = (d) => `<article class="paper paper--${d.kind}">${body(d)}</article>`;
@@ -190,13 +202,21 @@
         <button class="btn" data-act="forward">${C().turn.button}</button>
       </div>`),
 
+    solution: () => scene('solution', `
+      <div class="stage stage--center">
+        <article class="paper paper--typed paper--memo">${C().solution.html}</article>
+        <button class="btn btn--quiet" data-act="restart">Сыграть сначала</button>
+      </div>`),
+
     end: () => {
       const c = C();
       const next = CHS[S.ch + 1];
       return scene('end', `
         <div class="stage stage--center">
           <article class="paper paper--typed paper--memo">${c.end.html(S.found.size, total(c), S.hours, S)}</article>
-          ${next ? `<button class="btn" data-act="nextch">Дальше: ${next.name}, «${next.title}»</button>` : ''}
+          ${next && gated() ? `<article class="paper paper--form paywall"><h2>${c.gate.title}</h2>${c.gate.html}</article>` : ''}
+          ${next && !gated() ? `<button class="btn" data-act="nextch">Дальше: ${next.name}, «${next.title}»</button>` : ''}
+          ${!next && c.solution ? '<button class="btn" data-act="forward">Разбор дела</button>' : ''}
           <button class="btn btn--quiet" data-act="restart">Сыграть сначала</button>
         </div>`);
     },
@@ -281,6 +301,7 @@
       next();
     },
     nextch: () => {
+      if (gated()) return;
       S = blank(S.ch + 1, CHS[S.ch + 1].startHours ?? S.hours);
       go('intro');
     },

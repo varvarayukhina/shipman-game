@@ -240,3 +240,12 @@ button { font: inherit; color: inherit; }
   .slot { grid-template-columns: 7.4em 1fr; gap: 8px; }
   .slot--set, .slot--gap { grid-template-columns: 1fr; gap: 4px; }
 }
+
+/* экран «дальше платно» */
+.paywall { width: min(100%, 560px); }
+.paywall p:last-child { margin-bottom: 0; font-weight: 700; }
+
+/* разбор дела */
+.paper ol { margin: 0 0 14px; padding-left: 1.6em; }
+.paper li { margin-bottom: 8px; }
+.paper--memo h2 { margin-top: 22px; }

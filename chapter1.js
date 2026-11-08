@@ -5,6 +5,12 @@ window.CH1 = {
   steps: ['intro', 'desk', 'interview', 'turn', 'end'],
   img: { intro: 'img/street-1998.png', desk: 'img/case-desk.png', interview: 'img/interview-room.png', turn: 'img/case-desk.png', end: 'img/case-desk.png' },
   deskNext: 'Вызвать на допрос',
+  gate: {
+    title: 'Дальше платная часть',
+    html: `
+      <p>Глава 1 бесплатная. Впереди ещё три: что он говорит про утро 24 июня, что показал журнал компьютера и сколько их было на самом деле.</p>
+      <p>Оплата пока не подключена.</p>`,
+  },
   clock: { label: 'Срок задержания', hours: 24, missCost: 3 },
   minRead: 4,
   suspect: 'Шипман',
