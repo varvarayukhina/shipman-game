@@ -25,7 +25,7 @@
   window.CH4 = {
     name: 'Глава 4', title: 'Цифра',
     steps: ['intro', 'desk', 'audit', 'interview', 'turn', 'end', 'reveal', 'solution'],
-    img: { intro: 'img/interview-room.png', desk: 'img/case-desk.png', audit: 'img/case-desk.png', interview: 'img/interview-room.png', turn: 'img/case-desk.png', end: 'img/court.png', reveal: 'img/street-1998.png', solution: 'img/court.png' },
+    img: { intro: 'img/interview-room.jpg', desk: 'img/case-desk.jpg', audit: 'img/case-desk.jpg', interview: 'img/interview-room.jpg', turn: 'img/case-desk.jpg', end: 'img/court.jpg', reveal: 'img/street-1998.jpg', solution: 'img/court.jpg' },
     endNext: 'Чьё это было дело?',
     startHours: 24,
     clock: { label: 'Срок задержания', missCost: 3 },
@@ -106,7 +106,7 @@
         kind: 'photo', title: 'Фото кладбища', short: 'эксгумация, сентябрь 1998',
         html: `
           <figure class="photo">
-            <img src="img/cemetery-tent.png" width="1672" height="941" alt="Кладбище в тумане: оцепление из ленты, белая палатка криминалистов среди надгробий, белый фургон на дорожке">
+            <img src="img/cemetery-tent.jpg" width="1672" height="941" alt="Кладбище в тумане: оцепление из ленты, белая палатка криминалистов среди надгробий, белый фургон на дорожке">
             <figcaption>Фото 11. Кладбище, сентябрь 1998. Работы по эксгумации. Людей на снимке нет.</figcaption>
           </figure>
           <p class="typed">Эксгумации проводились по разрешению коронера. Тела вскрывали в лаборатории, пробы тканей отправляли на анализ.</p>`,

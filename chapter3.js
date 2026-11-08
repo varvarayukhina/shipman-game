@@ -28,7 +28,7 @@
   window.CH3 = {
     name: 'Глава 3', title: 'Журнал правок',
     steps: ['intro', 'desk', 'audit', 'interview', 'turn', 'end'],
-    img: { intro: 'img/surgery-office.png', desk: 'img/case-desk.png', audit: 'img/surgery-office.png', interview: 'img/interview-room.png', turn: 'img/surgery-office.png', end: 'img/cemetery-tent.png' },
+    img: { intro: 'img/surgery-office.jpg', desk: 'img/case-desk.jpg', audit: 'img/surgery-office.jpg', interview: 'img/interview-room.jpg', turn: 'img/surgery-office.jpg', end: 'img/cemetery-tent.jpg' },
     clock: { label: 'Срок задержания', missCost: 3 },
     minRead: 4,
     suspect: '⟦имя⟧',
@@ -79,7 +79,7 @@
         kind: 'photo', title: 'Фото кабинета', short: 'компьютер и принтер',
         html: `
           <figure class="photo">
-            <img src="img/surgery-office.png" width="1672" height="941" alt="Кабинет врача вечером: бежевый монитор и клавиатура на деревянном столе, матричный принтер с зелёной перфорированной бумагой, стопка бумажных карт, настольная лампа, кушетка у окна">
+            <img src="img/surgery-office.jpg" width="1672" height="941" alt="Кабинет врача вечером: бежевый монитор и клавиатура на деревянном столе, матричный принтер с зелёной перфорированной бумагой, стопка бумажных карт, настольная лампа, кушетка у окна">
             <figcaption>Фото 7. Кабинет врача, 1.8.98. Компьютер в сети клиники, рядом принтер.</figcaption>
           </figure>
           <p class="typed">Принтер матричный, бумага с перфорацией. Карты в бумажных папках лежат рядом с компьютером.</p>`,

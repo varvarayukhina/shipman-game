@@ -5,7 +5,7 @@
   window.CH2 = {
     name: 'Глава 2', title: 'Утро 24 июня',
     steps: ['intro', 'desk', 'timeline', 'interview', 'turn', 'end'],
-    img: { intro: 'img/living-room.png', desk: 'img/case-desk.png', timeline: 'img/case-desk.png', interview: 'img/interview-room.png', turn: 'img/surgery-office.png', end: 'img/living-room.png' },
+    img: { intro: 'img/living-room.jpg', desk: 'img/case-desk.jpg', timeline: 'img/case-desk.jpg', interview: 'img/interview-room.jpg', turn: 'img/surgery-office.jpg', end: 'img/living-room.jpg' },
     clock: { label: 'Срок задержания', missCost: 3 },
     minRead: 4,
     suspect: '⟦имя⟧',
@@ -76,7 +76,7 @@
         kind: 'photo', title: 'Фото места', short: 'гостиная, 24.6.98',
         html: `
           <figure class="photo">
-            <img src="img/living-room.png" width="1672" height="941" alt="Гостиная в доме пожилой женщины: диван с вязаной кофтой на спинке и очками на подушке, чашка с блюдцем на столике, открытая дверь в прихожую, за ней входная дверь">
+            <img src="img/living-room.jpg" width="1672" height="941" alt="Гостиная в доме пожилой женщины: диван с вязаной кофтой на спинке и очками на подушке, чашка с блюдцем на столике, открытая дверь в прихожую, за ней входная дверь">
             <figcaption>Фото 3. Гостиная, 24.6.98. Место, где её нашли. Людей на снимке нет.</figcaption>
           </figure>
           <p class="typed">На диване кофта и очки. На столике чашка. Дверь из гостиной в прихожую открыта. Входная дверь, со слов свидетелей, не была заперта.</p>`,

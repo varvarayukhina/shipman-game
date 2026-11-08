@@ -19,7 +19,7 @@
   window.V4 = {
     name: 'Глава 4', title: 'Раздел',
     steps: ['intro', 'desk', 'audit', 'interview', 'turn', 'end', 'reveal', 'solution'],
-    img: { intro: 'img/night-street.png', desk: 'img/case-desk.png', audit: 'img/case-desk.png', interview: 'img/interview-room.png', turn: 'img/headstone.png', end: 'img/vault-wall.png', reveal: 'img/night-street.png', solution: 'img/vault-wall.png' },
+    img: { intro: 'img/night-street.jpg', desk: 'img/case-desk.jpg', audit: 'img/case-desk.jpg', interview: 'img/interview-room.jpg', turn: 'img/headstone.jpg', end: 'img/vault-wall.jpg', reveal: 'img/night-street.jpg', solution: 'img/vault-wall.jpg' },
     endNext: 'Чьё это было дело?',
     clock: { label: 'Часов до переплавки золота', missCost: 3 },
     minRead: 4,
@@ -42,7 +42,7 @@
         kind: 'typed', title: 'Протокол задержания', short: 'дом на Милтон-роуд, дележ',
         html: `
           <h1>ПРОТОКОЛ ЗАДЕРЖАНИЯ</h1>
-          <p>19.5.15. Дом на Милтон-роуд, Эдмонтон. Внутри Брэнт, Кросс, Мэйс и Лэйн. На столе множество украшений, весы, электрический тигель, спортивные сумки.</p>
+          <p>19.5.15. Дом на Милтон-роуд. Внутри Брэнт, Кросс и Мэйс. Лэйн задержан отдельно, по месту жительства. На столе множество украшений, весы, электрический тигель, спортивные сумки.</p>
           <p>Перед этим передача сумок у офиса сантехника Бэйнса за пабом «Пшеничный сноп»: участвовали Брэнт, Кросс и Лэйн.</p>`,
       },
       search: {
@@ -135,7 +135,7 @@
       short: '',
       html: `
         <figure class="photo">
-          <img src="img/headstone.png" width="1672" height="941" alt="Старое кладбище в сумерках, надгробие с рыхлой землёй у основания, садовый совок, жёлтый маркер улики">
+          <img src="img/headstone.jpg" width="1672" height="941" alt="Старое кладбище в сумерках, надгробие с рыхлой землёй у основания, садовый совок, жёлтый маркер улики">
           <figcaption>Фото 21. Кладбище, октябрь 2015. Людей на снимке нет.</figcaption>
         </figure>
         <p class="typed">Октябрь, перед судом. Кросс сам предложил показать, куда зарыл часть добычи. Под надгробием нашли украшения.</p>
@@ -147,7 +147,7 @@
       html: (found, total, hours, S) => `
         <h1>КОНЕЦ ГЛАВЫ 4</h1>
         <p>Противоречий найдено: ${found} из ${total}. Найдено при обысках: ${S.audit.ok} из ${S.audit.total}. До переплавки золота осталось ${hours} ч.</p>
-        <p>В сентябре 2015 года трое главарей признали вину. Суд состоялся в марте 2016 года.</p>
+        <p>В сентябре 2015 года трое главарей признали вину. Приговор вынесли 9 марта 2016 года.</p>
         <table>
           <tr><th>Приговор</th><td>Срок</td></tr>
           <tr><td>Трое главарей, признали вину</td><td>по 7 лет</td></tr>

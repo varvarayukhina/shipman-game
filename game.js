@@ -17,7 +17,7 @@
   const blank = (ch, hours) => ({
     ch, step: CHS[ch].steps[0], hours,
     seen: new Set(), found: new Set(), round: 0, open: null, picks: [], log: [],
-    placed: {}, tlMsg: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
+    placed: {}, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
   });
   // Прогресс лежит в localStorage этого браузера: у каждого игрока свой, между устройствами не переносится.
   const KEY = GAME === '1' ? 'shipman-proto-v1' : `shipman-proto-v1-g${GAME}`;
@@ -200,6 +200,7 @@
         <div class="room">
           <article class="paper paper--transcript" aria-label="Протокол допроса">
             <h2>${c.transcriptTitle}</h2>
+            <p class="sr-only" role="status">${S.say || ''}</p>
             ${logHtml()}
             <p class="sh"><b>${c.suspect}:</b> ${q.say}</p>
           </article>
@@ -312,6 +313,7 @@
         reply(c.suspect, q.miss, 'sh');
         reply('', `Мимо. Потеряно ${c.clock.missCost} ч.`, 'loss');
       }
+      S.say = ok ? 'Противоречие зафиксировано.' : `Мимо. Потеряно ${c.clock.missCost} ч.`;
       next();
     },
     skip: () => {
@@ -329,12 +331,19 @@
       S = blank(S.ch + 1, CHS[S.ch + 1].startHours ?? S.hours);
       go('intro');
     },
-    restart: () => { S = blank(0, CHS[0].startHours ?? START_HOURS); go(S.step); },
+    restart: () => { if (!confirm('Начать это дело сначала? Прогресс будет стёрт.')) return; S = blank(0, CHS[0].startHours ?? START_HOURS); go(S.step); },
   };
 
   app.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');
-    if (el && !el.disabled) acts[el.dataset.act](el);
+    if (!el || el.disabled) return;
+    const sel = `[data-act="${el.dataset.act}"]${el.dataset.id ? `[data-id="${el.dataset.id}"]` : ''}${el.dataset.i ? `[data-i="${el.dataset.i}"]` : ''}`;
+    const was = `${S.ch}:${S.step}`;
+    acts[el.dataset.act](el);
+    // render() пересобирает страницу целиком: возвращаем фокус, иначе клавиатура и скринридер теряют место
+    const same = document.querySelector(sel);
+    if (was === `${S.ch}:${S.step}` && same && !same.disabled) same.focus({ preventScroll: true });
+    else { const h = document.querySelector('h1, h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } }
   });
 
   render();

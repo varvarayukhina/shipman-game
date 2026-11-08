@@ -17,7 +17,7 @@
   window.V2 = {
     name: 'Глава 2', title: 'Тишина',
     steps: ['intro', 'desk', 'audit', 'interview', 'turn', 'end'],
-    img: { intro: 'img/night-street.png', desk: 'img/case-desk.png', audit: 'img/case-desk.png', interview: 'img/interview-room.png', turn: 'img/case-desk.png', end: 'img/night-street.png' },
+    img: { intro: 'img/night-street.jpg', desk: 'img/case-desk.jpg', audit: 'img/case-desk.jpg', interview: 'img/interview-room.jpg', turn: 'img/case-desk.jpg', end: 'img/night-street.jpg' },
     clock: { label: 'Часов до переплавки золота', missCost: 3 },
     minRead: 4,
     suspect: 'Брэнт',
@@ -68,13 +68,13 @@
         html: `
           <h1>РАПОРТ НАРУЖНОГО НАБЛЮДЕНИЯ</h1>
           <p>8–10 апреля. Брэнт, Кросс (60 лет) и Мэйс (67 лет) встречаются в пабе «Замок» каждые два дня, сидят вместе по часу и расходятся. Говорят негромко. Телефонами не пользуются.</p>
-          <p>Кросс и Мэйс тоже с судимостями за кражи и ограбления.</p>`,
+          <p>Кросс и Мэйс тоже с судимостями за кражи и ограбления. С Кроссом иногда видят и Вейла, 59 лет, судимого, с долгами.</p>`,
       },
       photo: {
         kind: 'photo', title: 'Фото улицы', short: 'Грэнвилл-стрит, ночью',
         html: `
           <figure class="photo">
-            <img src="img/night-street.png" width="1672" height="941" alt="Узкая лондонская улица ночью, мокрый асфальт, закрытые жалюзи магазинов, белый фургон у тротуара, тёмный Мерседес дальше по улице, запасный выход с пожарной лестницей">
+            <img src="img/night-street.jpg" width="1672" height="941" alt="Узкая лондонская улица ночью, мокрый асфальт, закрытые жалюзи магазинов, белый фургон у тротуара, тёмный Мерседес дальше по улице, запасный выход с пожарной лестницей">
             <figcaption>Фото 9. Улица у запасного выхода, ночь. Людей на снимке нет.</figcaption>
           </figure>
           <p class="typed">Белый фургон и тёмный седан на соседних улицах. Запасной выход выходит в тёмный двор.</p>`,

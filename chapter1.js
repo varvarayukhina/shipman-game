@@ -3,7 +3,7 @@
 window.CH1 = {
   name: 'Глава 1', title: 'Завещание',
   steps: ['cover', 'intro', 'desk', 'interview', 'turn', 'end'],
-  img: { cover: 'img/street-1998.png', intro: 'img/street-1998.png', desk: 'img/case-desk.png', interview: 'img/interview-room.png', turn: 'img/case-desk.png', end: 'img/case-desk.png' },
+  img: { cover: 'img/street-1998.jpg', intro: 'img/street-1998.jpg', desk: 'img/case-desk.jpg', interview: 'img/interview-room.jpg', turn: 'img/case-desk.jpg', end: 'img/case-desk.jpg' },
   deskNext: 'Вызвать на допрос',
   gate: {
     title: 'Дальше платная часть',
