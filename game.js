@@ -38,7 +38,8 @@
       return localStorage.getItem(ACCESS) === '1';
     } catch (e) { console.warn('access flag unavailable:', e.message); return false; }
   };
-  const gated = () => !!C().gate && !hasAccess();
+  const PAYWALL = false; // true: после главы 1 показывается экран «платно»; false: все главы открыты (версия для оценки)
+  const gated = () => PAYWALL && !!C().gate && !hasAccess();
   const total = (c) => c.interview.filter((q) => !q.locked).length;
   const body = (d) => (typeof d.html === 'function' ? d.html(S) : d.html);
   const paper = (d) => `<article class="paper paper--${d.kind}">${body(d)}</article>`;
