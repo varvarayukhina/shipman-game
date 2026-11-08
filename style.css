@@ -253,3 +253,4 @@ button { font: inherit; color: inherit; }
 /* «Это было на самом деле» в конце главы */
 .paper .real { margin: 18px 0 0; }
 .paper .real .stamp { display: block; width: fit-content; margin: 0 0 10px; }
+a.btn { display: inline-block; text-decoration: none; }

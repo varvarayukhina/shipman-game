@@ -1,6 +1,9 @@
 /* Движок: главы идут цепочкой, каждая задаёт свои шаги (steps). Содержание дела лежит в chapter1.js ... chapter3.js. */
 (() => {
-  const CHS = [window.CH1, window.CH2, window.CH3, window.CH4];
+  // Две игры (дела): ?game=2 открывает вторую. У каждой свой ключ сохранения.
+  const GAMES = { 1: [window.CH1, window.CH2, window.CH3, window.CH4], 2: [window.V1, window.V2, window.V3, window.V4] };
+  const GAME = GAMES[new URLSearchParams(location.search).get('game')] ? new URLSearchParams(location.search).get('game') : '1';
+  const CHS = GAMES[GAME];
   const app = document.getElementById('app');
   const START_HOURS = 24;
 
@@ -17,7 +20,7 @@
     placed: {}, tlMsg: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
   });
   // Прогресс лежит в localStorage этого браузера: у каждого игрока свой, между устройствами не переносится.
-  const KEY = 'shipman-proto-v1';
+  const KEY = GAME === '1' ? 'shipman-proto-v1' : `shipman-proto-v1-g${GAME}`;
   const save = () => {
     try { localStorage.setItem(KEY, JSON.stringify(S, (k, v) => (v instanceof Set ? { set: [...v] } : v))); }
     catch (e) { console.warn('progress not saved:', e.message); }
@@ -28,10 +31,10 @@
       if (!raw) return null;
       const o = JSON.parse(raw, (k, v) => (v && !Array.isArray(v) && v.set ? new Set(v.set) : v));
       const c = CHS[o.ch];
-      return c && c.steps.includes(o.step) && o.round <= c.interview.length ? o : null;
+      return c && c.steps.includes(o.step) && o.round <= (c.interview || []).length ? o : null;
     } catch (e) { console.warn('progress not loaded:', e.message); return null; }
   };
-  let S = load() || blank(0, START_HOURS);
+  let S = load() || blank(0, CHS[0].startHours ?? START_HOURS);
 
   const C = () => CHS[S.ch];
 
@@ -47,7 +50,7 @@
   };
   const PAYWALL = false; // true: после главы 1 показывается экран «платно»; false: все главы открыты (версия для оценки)
   const gated = () => PAYWALL && !!C().gate && !hasAccess();
-  const total = (c) => c.interview.filter((q) => !q.locked).length;
+  const total = (c) => (c.interview || []).filter((q) => !q.locked).length;
   const body = (d) => (typeof d.html === 'function' ? d.html(S) : d.html);
   const paper = (d) => `<article class="paper paper--${d.kind}">${body(d)}</article>`;
   const scene = (step, inner) => `<section class="scene" style="--bg:url(${C().img[step] || C().img.desk})">${inner}</section>`;
@@ -58,7 +61,7 @@
     <header class="bar">
       <span class="bar__item"><b>${c.name}</b><span class="bar__t">${c.title}</span></span>
       <span class="bar__item"><b>${c.clock.label}</b> <span class="num">${S.hours}</span> ч</span>
-      <span class="bar__item"><b>Противоречий</b> <span class="num">${S.found.size}</span> из ${total(c)}</span>
+      ${c.interview ? `<span class="bar__item"><b>Противоречий</b> <span class="num">${S.found.size}</span> из ${total(c)}</span>` : ''}
     </header>`;
   };
 
@@ -225,6 +228,7 @@
     solution: () => scene('solution', `
       <div class="stage stage--center">
         <article class="paper paper--typed paper--memo">${C().solution.html}</article>
+        ${C().solution.next ? `<a class="btn" href="${C().solution.next.href}">${C().solution.next.label}</a>` : ''}
         <button class="btn btn--quiet" data-act="restart">Сыграть сначала</button>
       </div>`),
 
@@ -325,7 +329,7 @@
       S = blank(S.ch + 1, CHS[S.ch + 1].startHours ?? S.hours);
       go('intro');
     },
-    restart: () => { S = blank(0, START_HOURS); go('intro'); },
+    restart: () => { S = blank(0, CHS[0].startHours ?? START_HOURS); go(S.step); },
   };
 
   app.addEventListener('click', (e) => {
