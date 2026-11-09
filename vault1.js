@@ -2,7 +2,7 @@
    Названия и имена изменены, реплики и часть документов придуманы. Что факт, а что придумано, лежит в notes/SCRIPT-NOTES-2.md (в продакшен-пакет не входит). */
 window.V1 = {
   name: 'Глава 1', title: 'Шахта',
-  meta: { title: 'Хранилище', img: 'img/vault-wall.jpg', alt: 'Подвал с рядами стальных ячеек и неровным проломом в бетонной стене', teaser: 'Пасхальные выходные, подвал ювелирного квартала, пролом в стене. Входы целы, а у подозреваемого железное алиби.', meta: '4 главы. Глава 1 бесплатная.' },
+  meta: { title: 'Хранилище', img: 'img/vault-wall.jpg', alt: 'Подвал с рядами стальных ячеек и неровным проломом в бетонной стене', teaser: 'Пасхальные выходные, подвал ювелирного квартала, пролом в стене. Входы целы, а у подозреваемого железное алиби.', meta: '4 главы.' },
   steps: ['cover', 'intro', 'opener', 'desk', 'timeline', 'turn', 'end'],
   img: { opener: 'img/vault-wall.jpg', cover: 'img/night-street.jpg', intro: 'img/night-street.jpg', desk: 'img/case-desk.jpg', timeline: 'img/case-desk.jpg', turn: 'img/case-desk.jpg', end: 'img/night-street.jpg' },
   startHours: 48,
