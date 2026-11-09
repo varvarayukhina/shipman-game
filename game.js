@@ -6,6 +6,7 @@
     2: [window.V1, window.V2, window.V3, window.V4],
     3: [window.W1, window.W2, window.W3, window.W4].filter(Boolean),
     4: [window.Z1, window.Z2, window.Z3].filter(Boolean),
+    5: [window.T1].filter(Boolean),
   };
   const app = document.getElementById('app');
   const ASKED = new URLSearchParams(location.search).get('game');
@@ -17,7 +18,7 @@
     const cards = Object.keys(GAMES).filter((n) => GAMES[n][0] && GAMES[n][0].meta).map((n) => {
       const m = GAMES[n][0].meta;
       const st = prog(n);
-      const label = !st ? 'Начать' : st.step === 'solution' ? 'Пройдено. Сыграть снова' : `Продолжить: глава ${st.ch + 1}`;
+      const label = m.href ? 'Играть командой' : !st ? 'Начать' : st.step === 'solution' ? 'Пройдено. Сыграть снова' : `Продолжить: глава ${st.ch + 1}`;
       return `
         <article class="case">
           <img src="${m.img}" width="1672" height="941" alt="${m.alt}">
@@ -25,7 +26,7 @@
             <p class="case__tag">${m.tag}</p>
             <h2>Дело №${n}. ${m.title}</h2>
             <p>${m.teaser}</p>
-            <a class="btn" href="?game=${n}">${label}</a>
+            <a class="btn" href="${m.href || `?game=${n}`}">${label}</a>
           </div>
         </article>`;
     }).join('');
@@ -41,6 +42,7 @@
         </div>
       </section>`;
   }
+  if (ASKED && GAMES[ASKED] && GAMES[ASKED][0].team) { location.replace('team.html'); return; }
   if (!GAMES[ASKED]) { catalog(); return; }
   const GAME = ASKED;
   const CHS = GAMES[GAME];
