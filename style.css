@@ -317,7 +317,7 @@ a.btn { display: inline-block; text-decoration: none; }
 @media (min-width: 700px) { .cab { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .drawer {
   appearance: none; border: 0; cursor: pointer; position: relative; text-align: left; color: var(--ink);
-  min-height: 140px; padding: 12px 10px 40px; border-radius: 4px;
+  min-height: 118px; padding: 10px 8px 38px; border-radius: 4px;
   background: linear-gradient(#b4bcb8, #8a928e);
   box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.4), inset 0 -3px 0 rgb(0 0 0 / 0.3), 0 3px 6px rgb(0 0 0 / 0.4);
   transition: transform 160ms var(--ease);
@@ -347,3 +347,18 @@ a.btn { display: inline-block; text-decoration: none; }
 .req--in { border-color: var(--stamp); }
 .req__s { color: var(--ink-soft); }
 .req__note { margin: 10px 0 0; font-weight: 700; }
+
+/* картотека в делах №1–4: комнаты, ящики, папки, проверка хронологии */
+.archive { flex: 1; display: grid; gap: 20px; align-content: start; justify-items: center; padding: 20px max(16px, env(safe-area-inset-left)) 28px; }
+.archive > * { width: min(100%, 760px); }
+.rooms { display: flex; flex-wrap: wrap; gap: 8px; }
+.rooms__btn { appearance: none; cursor: pointer; min-height: 44px; padding: 8px 16px; border: 1px solid var(--bar-line); border-radius: 3px; background: var(--bar); color: var(--bar-ink); font-weight: 700; font-size: 16px; }
+.rooms__btn[aria-pressed='true'] { background: var(--accent); color: var(--bar); border-color: var(--accent); }
+.fld__tt { display: block; }
+.fld__ts { display: block; font-weight: 400; font-size: 16px; color: var(--ink); }
+.slot--ok { background: #d3e6c3; }
+.slot__btn--undo { margin-top: 8px; min-height: 44px; padding: 8px 14px; }
+.tl__msg { padding: 10px 12px; background: #efe9d3; border: 2px solid var(--ink); border-radius: 2px; min-height: 0; }
+
+.fld__fig { margin: 0 0 14px; color: var(--ink); }
+.fld__fig figcaption { color: var(--ink); }

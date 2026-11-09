@@ -58,7 +58,7 @@
   const blank = (ch, hours) => ({
     ch, step: CHS[ch].steps[0], hours,
     seen: new Set(), found: new Set(), round: 0, open: null, picks: [], log: [],
-    placed: {}, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
+    placed: {}, ver: {}, tlFails: 0, fav: new Set(), room: null, drawer: null, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
     opener: { pick: null, done: false, ok: false }, choice: { pick: null, done: false, ok: false }, cross: { asked: [] }, lab: { phase: 'tests', run: [], pick: [], done: false, ok: false }, misses: 0, partial: [], deadline: null, closed: false, notice: '', noticeNext: '',
   });
   // Прогресс лежит в localStorage этого браузера: у каждого игрока свой, между устройствами не переносится.
@@ -77,7 +77,10 @@
       if (!c || !c.steps.includes(o.step) || o.round > (c.interview || []).length) return null;
       // содержание глав обновляли: расстановка событий, которой нет в хронологии, сбрасывается
       const T = c.timeline;
-      if (T && Object.entries(o.placed || {}).some(([i, id]) => !T.slots[i] || T.slots[i].locked || !T.events.some((e) => e.id === id))) { o.placed = {}; o.tlMsg = ''; }
+      if (T && Object.entries(o.placed || {}).some(([i, id]) => !T.slots[i] || T.slots[i].locked || !T.events.some((e) => e.id === id))) { o.placed = {}; o.ver = {}; o.tlMsg = ''; }
+      // раньше в слот попадала только верная карточка: старая расстановка считается проверенной
+      if (!o.ver) o.ver = Object.fromEntries(Object.keys(o.placed || {}).map((i) => [i, 1]));
+      o.ver = Object.fromEntries(Object.keys(o.ver).filter((i) => (o.placed || {})[i]).map((i) => [i, 1]));
       return { ...blank(o.ch, o.hours), ...o };
     } catch (e) { console.warn('progress not loaded:', e.message); return null; }
   };
@@ -111,6 +114,19 @@
   const body = (d) => (typeof d.html === 'function' ? d.html(S) : d.html);
   const paper = (d) => `<article class="paper paper--${d.kind}">${body(d)}</article>`;
   const scene = (step, inner) => `<section class="scene" style="--bg:url(${C().img[step] || C().img.desk})">${inner}</section>`;
+
+  // Картотека: комнаты → ящики → папки (бумаги). Описание лежит в archive.js; без него все бумаги в одном ящике.
+  const DRAWER_MARK = ['А', 'Б', 'В', 'Г', 'Д', 'Е'];
+  const rooms = () => {
+    const c = C();
+    const all = Object.keys(c.documents);
+    const base = c.archive ? c.archive.rooms : [{ id: 'main', name: 'Материалы дела', img: c.img.desk, drawers: [{ id: 'all', name: 'Материалы дела', docs: all }] }];
+    const listed = new Set(base.flatMap((r) => r.drawers.flatMap((d) => d.docs)));
+    const rest = all.filter((id) => !listed.has(id));
+    return rest.length ? base.map((r, i) => (i ? r : { ...r, drawers: [...r.drawers, { id: 'rest', name: 'Прочее', docs: rest }] })) : base;
+  };
+  const curRoom = () => rooms().find((r) => r.id === S.room) || rooms()[0];
+  const favIds = () => [...S.fav].filter((id) => C().documents[id]);
 
   const bar = () => {
     const c = C();
@@ -278,29 +294,54 @@
 
     desk: () => {
       const c = C();
-      const ids = Object.keys(c.documents);
+      const R = rooms();
+      const room = curRoom();
+      const favs = favIds();
+      const dr = S.drawer === 'fav' ? { id: 'fav', name: 'Избранное', docs: favs } : room.drawers.find((d) => d.id === S.drawer);
+      const mark = (d) => (d.id === 'fav' ? '★' : DRAWER_MARK[room.drawers.indexOf(d)] || '·');
       const ready = S.seen.size >= c.minRead;
-      return scene('desk', `
-        ${bar()}
-        <div class="desk">
-          <ul class="sheets" aria-label="Материалы дела">
-            ${ids.map((id) => `<li>${chip(id, `data-act="open" aria-pressed="${S.open === id}"`)}${S.seen.has(id) ? '<span class="seen">прочитано</span>' : ''}</li>`).join('')}
-          </ul>
-          <div class="reader">
-            ${S.open ? paper(c.documents[S.open]) : `<article class="paper paper--typed"><p>${c.deskHint}</p></article>`}
+      let inner;
+      if (!dr) {
+        inner = `<div class="cab" aria-label="Картотека: ${room.name}">
+            ${room.drawers.map((d) => `<button class="drawer" data-act="drawer" data-id="${d.id}"><span class="drawer__label"><span class="drawer__n">Ящик ${mark(d)}</span><span class="drawer__t">${d.name}</span><span class="drawer__s">прочитано ${d.docs.filter((id) => S.seen.has(id)).length}/${d.docs.length}</span></span></button>`).join('')}
+            ${favs.length ? `<button class="drawer drawer--fav" data-act="drawer" data-id="fav"><span class="drawer__label"><span class="drawer__n">★</span><span class="drawer__t">Избранное</span><span class="drawer__s">бумаг: ${favs.length}</span></span></button>` : ''}
           </div>
+          <article class="paper paper--typed"><p>${c.deskHint}</p></article>`;
+      } else {
+        const open = dr.docs.includes(S.open) ? S.open : null;
+        const d = open && c.documents[open];
+        inner = `<div class="fld">
+            <div class="fld__tabs">${dr.docs.map((id) => `<button class="fld__tab" data-act="open" data-id="${id}" aria-pressed="${open === id}"><span class="fld__tt">${S.seen.has(id) ? '✓ ' : ''}${c.documents[id].title}</span><span class="fld__ts">${c.documents[id].short}</span></button>`).join('')}</div>
+            <div class="fld__body">
+              ${d ? `${d.img ? `<figure class="photo fld__fig"><img src="${d.img.src}" width="1400" height="788" loading="lazy" alt="${d.img.alt}"><figcaption>${d.img.cap}</figcaption></figure>` : ''}<article class="paper paper--${d.kind} fld__paper">${body(d)}</article>
+                <div class="fld__acts"><button class="btn btn--quiet" data-act="fav" data-id="${open}" aria-pressed="${S.fav.has(open)}">${S.fav.has(open) ? '★ В избранном' : '☆ В избранное'}</button></div>`
+                : `<article class="paper paper--form fld__empty"><h2>Ящик ${mark(dr)}. ${dr.name}</h2><p>${dr.docs.length ? 'Выбери папку.' : 'Здесь пока пусто. Открой бумагу и нажми «В избранное».'}</p></article>`}
+            </div>
+          </div>
+          <div class="files__nav"><button class="btn btn--quiet" data-act="cab">Назад в шкаф</button></div>`;
+      }
+      return `<section class="scene" style="--bg:url(${room.img || c.img.desk})">
+        ${bar()}
+        <div class="archive">
+          ${R.length > 1 ? `<nav class="rooms" aria-label="Комнаты">${R.map((r) => `<button class="rooms__btn" data-act="room" data-id="${r.id}" aria-pressed="${r.id === room.id}">${r.id === room.id ? '' : '→ '}${r.name}</button>`).join('')}</nav>` : ''}
+          ${inner}
         </div>
         <footer class="dock">
           <button class="btn" data-act="forward" ${ready ? '' : 'disabled'}>${c.deskNext}${ready ? '' : `: прочитано ${S.seen.size} из ${c.minRead}`}</button>
           ${timerOn() ? '<button class="btn btn--quiet" data-act="notimer">Без таймера</button>' : ''}
-        </footer>`);
+        </footer>
+      </section>`;
     },
 
     timeline: () => {
       const T = C().timeline;
       const placed = new Set(Object.values(S.placed));
       const free = T.events.filter((e) => !placed.has(e.id));
-      const ready = T.slots.every((s, i) => s.locked || S.placed[i]);
+      const toPlace = T.slots.filter((s, i) => !s.locked && !S.placed[i]).length;
+      const allFilled = toPlace === 0;
+      const allVer = T.slots.every((s, i) => s.locked || S.ver[i]);
+      const nVer = T.slots.filter((s, i) => !s.locked && S.ver[i]).length;
+      const nAll = T.slots.filter((s) => !s.locked).length;
       return scene('timeline', `
         ${bar()}
         ${notice()}
@@ -308,19 +349,21 @@
           <article class="paper paper--form" aria-label="${T.title}">
             <h2>${T.title}</h2>
             <p>${T.hint}</p>
-            ${S.picks[0] ? `<p class="tl__pick" role="status">Выбрано: <b>${T.events.find((e) => e.id === S.picks[0]).text}</b></p>` : ''}
+            <p>Когда все слоты заполнены, нажми «Проверить порядок»: верные карточки закрепятся, неверные вернутся в лоток. Первая проверка с ошибкой бесплатная, дальше каждая стоит ${T.missCost}&nbsp;${unit()}.</p>
+            <p class="tl__msg" role="status">${S.tlMsg || `Закреплено ${nVer} из ${nAll}.`}</p>
+            ${S.picks[0] ? `<p class="tl__pick" role="status">Выбрано: <b>${T.events.find((e) => e.id === S.picks[0]).text}</b>${S.tlFails ? ` Время ищи в: ${T.events.find((e) => e.id === S.picks[0]).src}.` : ''}</p>` : ''}
             <ol class="slots">
               ${T.slots.map((s, i) => {
                 const ev = S.placed[i] && T.events.find((e) => e.id === S.placed[i]);
+                const ok = !!S.ver[i];
                 const inner = s.locked
                   ? `<span class="slot__body">${s.locked}</span>`
                   : ev
-                    ? `<span class="slot__body"><b>${ev.text}</b><span class="slot__src">${ev.src}</span></span>`
+                    ? `<span class="slot__body"><b>${ev.text}</b>${ok ? `<span class="slot__src">Верно. Источник: ${ev.src}</span>` : `<button class="slot__btn slot__btn--undo" data-act="unplace" data-i="${i}">Убрать карточку</button>`}</span>`
                     : `<button class="slot__btn" data-act="slot" data-i="${i}" ${S.picks[0] ? '' : 'disabled'}>${S.picks[0] ? 'Поставить сюда' : 'Выбери событие'}</button>`;
-                return `<li class="slot${ev ? ' slot--set' : ''}${s.locked ? ' slot--gap' : ''}"><span class="slot__t">${s.t}</span>${inner}</li>`;
+                return `<li class="slot${ev ? ' slot--set' : ''}${ok ? ' slot--ok' : ''}${s.locked ? ' slot--gap' : ''}"><span class="slot__t">${s.t}</span>${inner}</li>`;
               }).join('')}
             </ol>
-            <p class="tl__msg" role="status">${S.tlMsg}</p>
           </article>
           ${free.length ? `<div class="tray">
             <p class="tray__t">События: осталось ${free.length}</p>
@@ -330,7 +373,9 @@
           </div>` : ''}
         </div>
         <footer class="dock">
-          <button class="btn" data-act="forward" ${ready ? '' : 'disabled'}>Дальше${ready ? '' : ': расставлены не все события'}</button>
+          ${allVer
+            ? '<button class="btn" data-act="forward">Дальше</button>'
+            : `<button class="btn" data-act="check" ${allFilled ? '' : 'disabled'}>Проверить порядок${allFilled ? '' : `: осталось поставить ${toPlace}`}</button>`}
         </footer>`);
     },
 
@@ -475,7 +520,16 @@
     forward,
     open: (el) => {
       S.open = el.dataset.id; S.seen.add(S.open); render();
-      if (matchMedia('(max-width: 899px)').matches) document.querySelector('.reader').scrollIntoView({ block: 'start' });
+      if (matchMedia('(max-width: 899px)').matches) document.querySelector('.fld__body')?.scrollIntoView({ block: 'start' });
+    },
+    room: (el) => { S.room = el.dataset.id; S.drawer = null; S.open = null; render(); window.scrollTo(0, 0); },
+    drawer: (el) => { S.drawer = el.dataset.id; S.open = null; render(); window.scrollTo(0, 0); },
+    cab: () => { S.drawer = null; S.open = null; render(); window.scrollTo(0, 0); },
+    fav: (el) => {
+      const id = el.dataset.id;
+      if (S.fav.has(id)) S.fav.delete(id); else S.fav.add(id);
+      if (S.drawer === 'fav' && !favIds().length) { S.drawer = null; S.open = null; }
+      render();
     },
     opick: (el) => { S.opener.pick = +el.dataset.i; render(); },
     oanswer: () => {
@@ -541,13 +595,29 @@
       const T = C().timeline;
       const i = +el.dataset.i;
       const ev = T.events.find((e) => e.id === S.picks[0]);
-      if (!ev) return;
-      if (ev.slot === i) { S.placed[i] = ev.id; S.tlMsg = `Верно. Источник: ${ev.src}.`; }
-      else { S.hours = Math.max(0, S.hours - T.missCost); S.tlMsg = `Мимо. Потеряно ${T.missCost} ${unit()}.`; }
-      S.picks = [];
-      if (T.slots.every((s, k) => s.locked || S.placed[k])) S.tlMsg = T.done;
+      if (!ev || T.slots[i].locked || S.placed[i]) return;
+      S.placed[i] = ev.id; S.tlMsg = ''; S.picks = [];
       render();
       toView('.tray');
+    },
+    unplace: (el) => { const i = +el.dataset.i; if (S.ver[i]) return; delete S.placed[i]; S.tlMsg = ''; render(); },
+    // Проверка всей расстановки сразу: считаем верные, закрепляем их, неверные возвращаем в лоток. Ошибка в проверке стоит часов.
+    check: () => {
+      const T = C().timeline;
+      let wrong = 0;
+      T.slots.forEach((sl, i) => {
+        if (sl.locked || S.ver[i] || !S.placed[i]) return;
+        const ev = T.events.find((e) => e.id === S.placed[i]);
+        if (ev && ev.slot === i) S.ver[i] = 1; else { delete S.placed[i]; wrong += 1; }
+      });
+      const nAll = T.slots.filter((sl) => !sl.locked).length;
+      const nVer = T.slots.filter((sl, i) => !sl.locked && S.ver[i]).length;
+      const free = wrong > 0 && !S.tlFails;
+      if (wrong) { if (!free) S.hours = Math.max(0, S.hours - T.missCost); S.tlFails += 1; }
+      S.tlMsg = wrong ? `Верно ${nVer} из ${nAll}. Неверных: ${wrong}, они вернулись в лоток. ${free ? 'Первая проверка бесплатная.' : `Проверка стоила ${T.missCost} ${unit()}.`}` : T.done;
+      S.picks = [];
+      render();
+      toView('.tl__msg');
     },
     flag: (el) => { const i = +el.dataset.i; S.flags.has(i) ? S.flags.delete(i) : S.flags.add(i); render(); },
     submit: () => {
@@ -620,7 +690,7 @@
   };
 
   // Двойной щелчок по «Решить» или «Дальше»: вторая половина попадала бы на новую кнопку и пропускала результат ответа.
-  const COMMIT = new Set(['forward', 'nextch', 'oanswer', 'ckanswer', 'labsubmit', 'submit', 'present', 'skip', 'accept', 'qask']);
+  const COMMIT = new Set(['check', 'forward', 'nextch', 'oanswer', 'ckanswer', 'labsubmit', 'submit', 'present', 'skip', 'accept', 'qask']);
   let lastCommit = 0;
   app.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');
