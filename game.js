@@ -72,7 +72,11 @@
       const o = JSON.parse(raw, (k, v) => (v && !Array.isArray(v) && v.set ? new Set(v.set) : v));
       const c = CHS[o.ch];
       // старые сохранения без новых полей дополняем значениями по умолчанию
-      return c && c.steps.includes(o.step) && o.round <= (c.interview || []).length ? { ...blank(o.ch, o.hours), ...o } : null;
+      if (!c || !c.steps.includes(o.step) || o.round > (c.interview || []).length) return null;
+      // содержание глав обновляли: расстановка событий, которой нет в хронологии, сбрасывается
+      const T = c.timeline;
+      if (T && Object.entries(o.placed || {}).some(([i, id]) => !T.slots[i] || T.slots[i].locked || !T.events.some((e) => e.id === id))) { o.placed = {}; o.tlMsg = ''; }
+      return { ...blank(o.ch, o.hours), ...o };
     } catch (e) { console.warn('progress not loaded:', e.message); return null; }
   };
   let S = load() || blank(0, CHS[0].startHours ?? START_HOURS);
@@ -206,6 +210,8 @@
       const st = S.lab;
       const ran = L.tests.filter((t) => st.run.includes(t.id));
       const basis = st.phase === 'basis';
+      const canMore = L.tests.some((t) => !st.run.includes(t.id) && t.cost <= S.hours);
+      const needN = Math.min(L.need, st.run.length);
       return scene('lab', `
         ${bar()}
         ${notice()}
@@ -218,7 +224,7 @@
           </article>
           <div class="tray">
             ${st.done ? '' : basis
-              ? `<p class="tray__t">Что лежит в основе заключения? Выбери ${L.need}. Выбрано: ${st.pick.length}.</p>
+              ? `<p class="tray__t">Что лежит в основе заключения? Выбери ${needN}. Выбрано: ${st.pick.length}.</p>
                  <div class="tray__chips">${ran.map((t) => `<button class="chip" data-act="labpick" data-id="${t.id}" aria-pressed="${st.pick.includes(t.id)}"><span class="chip__t">${t.name}</span><span class="chip__s">${t.short}</span></button>`).join('')}</div>`
               : `<p class="tray__t">Пробы. Осталось ${S.hours} ${unit()}.</p>
                  <div class="tray__chips">${L.tests.map((t) => { const used = st.run.includes(t.id); const cant = !used && t.cost > S.hours; return `<button class="chip" data-act="labrun" data-id="${t.id}" ${used || cant ? 'disabled' : ''}><span class="chip__t">${t.name}</span><span class="chip__s">${used ? 'проведена' : cant ? 'не хватает времени' : `${t.cost} ${unit()}`}</span></button>`; }).join('')}</div>`}
@@ -228,8 +234,8 @@
           ${st.done
             ? '<button class="btn" data-act="forward">Дальше</button>'
             : basis
-              ? `<button class="btn" data-act="labsubmit" ${st.pick.length === L.need ? '' : 'disabled'}>Подписать заключение</button>`
-              : `<button class="btn" data-act="labbasis" ${st.run.length ? '' : 'disabled'}>${st.run.length ? 'К заключению' : 'Сначала проведи пробу'}</button>`}
+              ? `<button class="btn" data-act="labsubmit" ${st.pick.length === needN ? '' : 'disabled'}>Подписать заключение</button>${canMore ? '<button class="btn btn--quiet" data-act="labback">Назад к пробам</button>' : ''}`
+              : `<button class="btn" data-act="labbasis" ${st.run.length >= L.need || !canMore ? '' : 'disabled'}>${st.run.length >= L.need || !canMore ? 'К заключению' : `Проведи ещё пробы: ${st.run.length} из ${L.need}`}</button>`}
         </footer>`);
     },
 
@@ -422,7 +428,7 @@
     },
   };
 
-  const go = (step) => { S.step = step; S.notice = S.noticeNext || ''; S.noticeNext = ''; render(); window.scrollTo(0, 0); };
+  const go = (step) => { S.step = step; S.picks = []; S.notice = S.noticeNext || ''; S.noticeNext = ''; render(); window.scrollTo(0, 0); };
   const forward = () => { const st = C().steps; go(st[st.indexOf(S.step) + 1]); };
 
   function render() {
@@ -497,8 +503,9 @@
       render();
     },
     labbasis: () => { S.lab.phase = 'basis'; S.lab.pick = []; render(); },
+    labback: () => { S.lab.phase = 'tests'; S.lab.pick = []; render(); },
     labpick: (el) => {
-      const id = el.dataset.id; const need = C().lab.need;
+      const id = el.dataset.id; const need = Math.min(C().lab.need, S.lab.run.length);
       if (S.lab.pick.includes(id)) S.lab.pick = S.lab.pick.filter((x) => x !== id);
       else if (S.lab.pick.length < need) S.lab.pick = [...S.lab.pick, id];
       render();
@@ -610,12 +617,17 @@
     restart: () => { if (!confirm('Начать это дело сначала? Прогресс будет стёрт.')) return; S = blank(0, CHS[0].startHours ?? START_HOURS); go(S.step); },
   };
 
+  // Двойной щелчок по «Решить» или «Дальше»: вторая половина попадала бы на новую кнопку и пропускала результат ответа.
+  const COMMIT = new Set(['forward', 'nextch', 'oanswer', 'ckanswer', 'labsubmit', 'submit', 'present', 'skip', 'accept', 'qask']);
+  let lastCommit = 0;
   app.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');
     if (!el || el.disabled) return;
+    if (Date.now() - lastCommit < 350) return;
     const sel = `[data-act="${el.dataset.act}"]${el.dataset.id ? `[data-id="${el.dataset.id}"]` : ''}${el.dataset.i ? `[data-i="${el.dataset.i}"]` : ''}`;
     const was = `${S.ch}:${S.step}`;
     acts[el.dataset.act](el);
+    if (COMMIT.has(el.dataset.act)) lastCommit = Date.now();
     // render() пересобирает страницу целиком: возвращаем фокус, иначе клавиатура и скринридер теряют место
     const same = document.querySelector(sel);
     if (was === `${S.ch}:${S.step}` && same && !same.disabled) same.focus({ preventScroll: true });
