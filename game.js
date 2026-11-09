@@ -58,7 +58,7 @@
   const blank = (ch, hours) => ({
     ch, step: CHS[ch].steps[0], hours,
     seen: new Set(), found: new Set(), round: 0, open: null, picks: [], log: [],
-    placed: {}, ver: {}, tlFails: 0, fav: new Set(), room: null, drawer: null, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
+    placed: {}, ver: {}, tlFails: 0, dos: { on: false, tab: 'fav', doc: null }, fav: new Set(), room: null, drawer: null, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
     opener: { pick: null, done: false, ok: false }, choice: { pick: null, done: false, ok: false }, cross: { asked: [] }, lab: { phase: 'tests', run: [], pick: [], done: false, ok: false }, misses: 0, partial: [], deadline: null, closed: false, notice: '', noticeNext: '',
   });
   // Прогресс лежит в localStorage этого браузера: у каждого игрока свой, между устройствами не переносится.
@@ -81,6 +81,7 @@
       // раньше в слот попадала только верная карточка: старая расстановка считается проверенной
       if (!o.ver) o.ver = Object.fromEntries(Object.keys(o.placed || {}).map((i) => [i, 1]));
       o.ver = Object.fromEntries(Object.keys(o.ver).filter((i) => (o.placed || {})[i]).map((i) => [i, 1]));
+      o.dos = { on: false, tab: 'fav', doc: null };
       return { ...blank(o.ch, o.hours), ...o };
     } catch (e) { console.warn('progress not loaded:', e.message); return null; }
   };
@@ -127,6 +128,79 @@
   };
   const curRoom = () => rooms().find((r) => r.id === S.room) || rooms()[0];
   const favIds = () => [...S.fav].filter((id) => C().documents[id]);
+  // Бумага с иллюстрацией и звёздочкой: одинаково на столе и в досье
+  const docHtml = (id) => {
+    const d = C().documents[id];
+    const fig = d.img ? `<figure class="photo fld__fig"><img src="${d.img.src}" width="1400" height="788" loading="lazy" alt="${d.img.alt}"><figcaption>${d.img.cap}</figcaption></figure>` : '';
+    return `${fig}<article class="paper paper--${d.kind} fld__paper">${body(d)}</article>
+      <div class="fld__acts"><button class="btn btn--quiet" data-act="fav" data-id="${id}" aria-pressed="${S.fav.has(id)}">${S.fav.has(id) ? '★ В избранном' : '☆ В избранное'}</button></div>`;
+  };
+  // Что игрок уже нашёл: для вкладки «Что известно» в досье
+  const knownList = () => {
+    const c = C(); const out = [];
+    if (c.opener && S.opener.done && S.opener.ok) out.push({ h: c.opener.title, t: c.opener.hit });
+    (c.interview || []).forEach((q, i) => { if (!q.locked && S.found.has(i)) out.push({ h: `Допрос, вопрос ${i + 1}`, t: q.note || q.hit }); });
+    if (c.lab && S.lab.done && S.lab.ok) out.push({ h: c.lab.title, t: c.lab.okText });
+    if (c.choice && S.choice.done && S.choice.ok) out.push({ h: c.choice.title, t: c.choice.options[S.choice.pick].out });
+    return out;
+  };
+  const dossierHtml = () => {
+    if (!S.dos.on) return '';
+    const c = C(); const favs = favIds();
+    const canRead = (id) => !(c.timed && S.closed && !S.seen.has(id));
+    const tab = S.dos.tab;
+    const ids = tab === 'fav' ? favs : tab === 'all' ? Object.keys(c.documents).filter(canRead) : [];
+    const open = ids.includes(S.dos.doc) ? S.dos.doc : null;
+    let inner;
+    if (tab === 'known') {
+      const k = knownList();
+      inner = k.length ? `<ol class="known">${k.map((x) => `<li><b>${x.h}.</b> ${x.t}</li>`).join('')}</ol>` : '<article class="paper paper--form"><p>Пока ничего не найдено. Противоречия появятся здесь, когда вы их зафиксируете.</p></article>';
+    } else if (!ids.length) {
+      inner = `<article class="paper paper--form"><p>${tab === 'fav' ? 'Избранного пока нет. Откройте бумагу во вкладке «Все бумаги» и нажмите «В избранное».' : 'Бумаг нет.'}</p></article>`;
+    } else {
+      inner = `<div class="fld">
+          <div class="fld__tabs">${ids.map((id) => `<button class="fld__tab" data-act="dopen" data-id="${id}" aria-pressed="${open === id}"><span class="fld__tt">${S.seen.has(id) ? '✓ ' : ''}${c.documents[id].title}</span><span class="fld__ts">${c.documents[id].short}</span></button>`).join('')}</div>
+          <div class="fld__body">${open ? docHtml(open) : '<article class="paper paper--form fld__empty"><p>Выбери папку.</p></article>'}</div>
+        </div>`;
+    }
+    const T = [['fav', `Избранное${favs.length ? ` (${favs.length})` : ''}`], ['all', 'Все бумаги'], ['known', 'Что известно']];
+    return `<div class="dossier" role="dialog" aria-modal="true" aria-labelledby="dossier-h">
+      <div class="dossier__sheet">
+        <div class="dossier__head"><h2 id="dossier-h" tabindex="-1">Досье</h2><button class="btn btn--quiet" data-act="dclose">Закрыть</button></div>
+        <nav class="rooms" aria-label="Разделы досье">${T.map(([id, name]) => `<button class="rooms__btn" data-act="dtab" data-id="${id}" aria-pressed="${tab === id}">${name}</button>`).join('')}</nav>
+        ${inner}
+      </div>
+    </div>`;
+  };
+
+  // Разбор главы: что игрок понял верно, что пропустил и где это лежало
+  const debriefHtml = () => {
+    const c = C(); const it = [];
+    const add = (ok, head, text) => it.push(`<li class="debrief__item"><span class="debrief__mark debrief__mark--${ok ? 'ok' : 'miss'}">${ok ? 'Верно' : 'Пропущено'}</span> <b>${head}.</b> ${text}</li>`);
+    if (c.opener) add(S.opener.ok, c.opener.title, S.opener.ok ? c.opener.hit : c.opener.miss);
+    if (c.timeline) add(true, c.timeline.title, S.tlFails ? `Порядок собран, проверок с ошибкой: ${S.tlFails}.` : 'Порядок собран с первой проверки.');
+    if (c.audit) {
+      const rows = c.audit.rows;
+      const missed = rows.filter((r, i) => r.hit && !S.flags.has(i)).map((r) => r.cells.join(', '));
+      const extra = rows.filter((r, i) => !r.hit && S.flags.has(i)).length;
+      add(!missed.length && !extra, c.audit.title, `Найдено ${S.audit.ok} из ${S.audit.total}${extra ? `, лишних отметок: ${extra}` : ''}.${missed.length ? ` Пропущено: ${missed.join('; ')}.` : ''}`);
+    }
+    (c.interview || []).forEach((q, i) => {
+      if (q.locked) return;
+      const found = S.found.has(i);
+      const docs = q.needs.map((id) => `«${c.documents[id].title}»`).join(', ');
+      add(found, `Допрос, вопрос ${i + 1}`, found ? (q.note || q.hit) : `Он сказал: «${q.say}» Опровергала это бумага ${docs}.`);
+    });
+    if (c.choice && S.choice.done) { const o = c.choice.options[S.choice.pick]; add(!!o.ok, c.choice.title, o.out); }
+    if (c.lab && S.lab.done) add(S.lab.ok, c.lab.title, S.lab.ok ? c.lab.okText : c.lab.badText);
+    if (c.cross) {
+      const asked = c.cross.questions.filter((q) => S.cross.asked.includes(q.id));
+      add(asked.filter((q) => q.d >= 0).length >= asked.filter((q) => q.d < 0).length, c.cross.title, `Вопросов задано ${asked.length}: в вашу пользу ${asked.filter((q) => q.d >= 0).length}, против ${asked.filter((q) => q.d < 0).length}.`);
+    }
+    if (!it.length) return '';
+    return `<article class="paper paper--form debrief"><h2>Разбор главы</h2><ul class="debrief__list">${it.join('')}</ul>
+      <p class="debrief__total">${c.clock.label}: ${S.hours} ${unit()}. Промахов на допросе: ${S.misses}.</p></article>`;
+  };
 
   const bar = () => {
     const c = C();
@@ -136,6 +210,7 @@
       <span class="bar__item"><b>${c.clock.label}</b> <span class="num">${S.hours}</span> ${unit()}</span>
       ${timerOn() && S.deadline ? `<span class="bar__item"><b>${c.timedLabel}</b> <span class="num" id="countdown" role="timer">${fmt(left())}</span></span>` : ''}
       ${c.interview || c.opener || c.choice || c.lab ? `<span class="bar__item"><b>${c.scoreLabel || 'Противоречий'}</b> <span class="num">${S.found.size}</span> из ${total(c)}</span>` : ''}
+      ${S.step === 'desk' ? '' : `<button class="bar__btn" data-act="dossier">Досье${favIds().length ? ` ★${favIds().length}` : ''}</button>`}
     </header>`;
   };
 
@@ -313,8 +388,7 @@
         inner = `<div class="fld">
             <div class="fld__tabs">${dr.docs.map((id) => `<button class="fld__tab" data-act="open" data-id="${id}" aria-pressed="${open === id}"><span class="fld__tt">${S.seen.has(id) ? '✓ ' : ''}${c.documents[id].title}</span><span class="fld__ts">${c.documents[id].short}</span></button>`).join('')}</div>
             <div class="fld__body">
-              ${d ? `${d.img ? `<figure class="photo fld__fig"><img src="${d.img.src}" width="1400" height="788" loading="lazy" alt="${d.img.alt}"><figcaption>${d.img.cap}</figcaption></figure>` : ''}<article class="paper paper--${d.kind} fld__paper">${body(d)}</article>
-                <div class="fld__acts"><button class="btn btn--quiet" data-act="fav" data-id="${open}" aria-pressed="${S.fav.has(open)}">${S.fav.has(open) ? '★ В избранном' : '☆ В избранное'}</button></div>`
+              ${d ? docHtml(open)
                 : `<article class="paper paper--form fld__empty"><h2>Ящик ${mark(dr)}. ${dr.name}</h2><p>${dr.docs.length ? 'Выбери папку.' : 'Здесь пока пусто. Открой бумагу и нажми «В избранное».'}</p></article>`}
             </div>
           </div>
@@ -467,9 +541,12 @@
       return scene('end', `
         <div class="stage stage--center">
           <article class="paper paper--typed paper--memo">${c.end.html(S.found.size, total(c), S.hours, S)}${c.end.real ? `<p class="real"><span class="stamp">Это было на самом деле</span> ${c.end.real}</p>` : ''}</article>
+          ${debriefHtml()}
           ${next && gated() ? `<article class="paper paper--form paywall"><h2>${c.gate.title}</h2>${c.gate.html}</article>` : ''}
           ${next && !gated() ? `<button class="btn" data-act="nextch">Дальше: ${next.name}, «${next.title}»</button>` : ''}
           ${!next && c.solution ? `<button class="btn" data-act="forward">${c.endNext}</button>` : ''}
+          <a class="btn btn--quiet" href="./">Сохранить и выйти</a>
+          <p class="stage__note">Прогресс сохраняется на этом устройстве сам.</p>
           <button class="btn btn--quiet" data-act="restart">Сыграть сначала</button>
         </div>`);
     },
@@ -480,7 +557,8 @@
 
   function render() {
     if (timerOn() && !S.deadline) S.deadline = Date.now() + C().timed * 1000;
-    app.innerHTML = named(views[S.step]());
+    app.innerHTML = named(views[S.step]() + dossierHtml());
+    document.body.classList.toggle('has-dossier', S.dos.on);
     const t = document.querySelector('.paper--transcript');
     if (t) t.scrollTop = t.scrollHeight;
     save();
@@ -522,6 +600,10 @@
       S.open = el.dataset.id; S.seen.add(S.open); render();
       if (matchMedia('(max-width: 899px)').matches) document.querySelector('.fld__body')?.scrollIntoView({ block: 'start' });
     },
+    dossier: () => { S.dos = { on: true, tab: favIds().length ? 'fav' : 'all', doc: null }; render(); document.getElementById('dossier-h')?.focus(); },
+    dclose: () => { S.dos.on = false; render(); document.querySelector('[data-act="dossier"]')?.focus(); },
+    dtab: (el) => { S.dos.tab = el.dataset.id; S.dos.doc = null; render(); },
+    dopen: (el) => { const id = el.dataset.id; S.dos.doc = id; if (!(C().timed && S.closed)) S.seen.add(id); render(); },
     room: (el) => { S.room = el.dataset.id; S.drawer = null; S.open = null; render(); window.scrollTo(0, 0); },
     drawer: (el) => { S.drawer = el.dataset.id; S.open = null; render(); window.scrollTo(0, 0); },
     cab: () => { S.drawer = null; S.open = null; render(); window.scrollTo(0, 0); },
@@ -700,11 +782,14 @@
     const was = `${S.ch}:${S.step}`;
     acts[el.dataset.act](el);
     if (COMMIT.has(el.dataset.act)) lastCommit = Date.now();
+    if (el.dataset.act === 'dossier' || el.dataset.act === 'dclose') return; // фокус уже поставлен в самом действии
     // render() пересобирает страницу целиком: возвращаем фокус, иначе клавиатура и скринридер теряют место
     const same = document.querySelector(sel);
     if (was === `${S.ch}:${S.step}` && same && !same.disabled) same.focus({ preventScroll: true });
     else { const h = document.querySelector('h1, h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } }
   });
 
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.dos.on) acts.dclose(); });
+  app.addEventListener('click', (e) => { if (e.target.classList && e.target.classList.contains('dossier')) acts.dclose(); });
   render();
 })();

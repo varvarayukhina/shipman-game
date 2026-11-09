@@ -362,3 +362,26 @@ a.btn { display: inline-block; text-decoration: none; }
 
 .fld__fig { margin: 0 0 14px; color: var(--ink); }
 .fld__fig figcaption { color: var(--ink); }
+
+/* досье и разбор главы */
+.bar__btn { appearance: none; cursor: pointer; margin-left: auto; min-height: 44px; padding: 6px 16px; border: 1px solid var(--accent); border-radius: 3px; background: transparent; color: var(--accent); font-weight: 700; font-size: 16px; }
+.bar__btn:hover { background: var(--accent); color: var(--bar); }
+.has-dossier { overflow: hidden; }
+.dossier { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center; background: rgb(8 6 4 / 0.82); }
+.dossier__sheet { width: min(100%, 860px); max-height: 94dvh; overflow: auto; display: grid; gap: 14px; align-content: start; padding: 16px max(16px, env(safe-area-inset-left)) 28px; background: var(--bar); border: 1px solid var(--bar-line); border-radius: 8px 8px 0 0; box-shadow: 0 -10px 40px rgb(0 0 0 / 0.6); }
+@media (min-width: 900px) { .dossier { align-items: center; } .dossier__sheet { border-radius: 8px; max-height: 88dvh; } }
+.dossier__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dossier__head h2 { margin: 0; font-size: 22px; }
+.dossier .paper { width: 100%; }
+.known { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.known li { background: var(--p-form); color: var(--ink); padding: 12px 14px; border-radius: 2px; }
+.debrief { width: min(100%, 720px); }
+.debrief__list { margin: 0 0 12px; padding: 0; list-style: none; display: grid; gap: 12px; }
+.debrief__item { padding: 10px 12px; background: #efe9d3; border: 2px solid var(--ink); border-radius: 2px; }
+.debrief__mark { display: inline-block; margin-right: 6px; padding: 0 10px; border: 2px solid var(--ink); border-radius: 2px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 16px; }
+.debrief__mark--ok { background: #d3e6c3; }
+.debrief__mark--miss { background: #f3d6c8; }
+.debrief__total { margin: 0; font-weight: 700; }
+.stage__note { margin: 0; padding: 8px 14px; text-align: center; background: var(--bar); border: 1px solid var(--bar-line); border-radius: 3px; }
+.dossier .fld__tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 0; scrollbar-width: thin; }
+.dossier .fld__tab { flex: 0 0 auto; max-width: 75vw; }
