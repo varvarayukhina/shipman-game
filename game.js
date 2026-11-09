@@ -5,6 +5,7 @@
     1: [window.CH1, window.CH2, window.CH3, window.CH4],
     2: [window.V1, window.V2, window.V3, window.V4],
     3: [window.W1, window.W2, window.W3, window.W4].filter(Boolean),
+    4: [window.Z1, window.Z2, window.Z3].filter(Boolean),
   };
   const app = document.getElementById('app');
   const ASKED = new URLSearchParams(location.search).get('game');
@@ -56,7 +57,7 @@
     ch, step: CHS[ch].steps[0], hours,
     seen: new Set(), found: new Set(), round: 0, open: null, picks: [], log: [],
     placed: {}, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
-    opener: { pick: null, done: false, ok: false }, choice: { pick: null, done: false, ok: false }, lab: { phase: 'tests', run: [], pick: [], done: false, ok: false }, misses: 0, partial: [], deadline: null, closed: false, notice: '', noticeNext: '',
+    opener: { pick: null, done: false, ok: false }, choice: { pick: null, done: false, ok: false }, cross: { asked: [] }, lab: { phase: 'tests', run: [], pick: [], done: false, ok: false }, misses: 0, partial: [], deadline: null, closed: false, notice: '', noticeNext: '',
   });
   // Прогресс лежит в localStorage этого браузера: у каждого игрока свой, между устройствами не переносится.
   const KEY = saveKey(GAME);
@@ -91,7 +92,7 @@
   const PAYWALL = false; // true: после главы 1 показывается экран «платно»; false: все главы открыты (версия для оценки)
   const gated = () => PAYWALL && !!C().gate && !hasAccess();
   const total = (c) => (c.opener ? 1 : 0) + (c.choice ? 1 : 0) + (c.lab ? 1 : 0) + (c.interview || []).filter((q) => !q.locked).length;
-  const unit = () => C().clock.unit || 'ч';
+  const unit = () => (C().clock && C().clock.unit) || 'ч';
 
   // Таймер чтения («архив закрывается»). Дедлайн хранится временем, обновление страницы его не сбрасывает.
   // «Без таймера» (доступность): кнопка на столе, выбор запоминается.
@@ -229,6 +230,35 @@
             : basis
               ? `<button class="btn" data-act="labsubmit" ${st.pick.length === L.need ? '' : 'disabled'}>Подписать заключение</button>`
               : `<button class="btn" data-act="labbasis" ${st.run.length ? '' : 'disabled'}>${st.run.length ? 'К заключению' : 'Сначала проведи пробу'}</button>`}
+        </footer>`);
+    },
+
+    cross: () => {
+      const K = C().cross;
+      const asked = S.cross.asked;
+      const left = K.picks - asked.length;
+      const free = K.questions.filter((q) => !asked.includes(q.id));
+      return scene('cross', `
+        ${bar()}
+        ${notice()}
+        <div class="room">
+          <article class="paper paper--transcript" aria-label="${K.title}">
+            <h2>${K.title}</h2>
+            <p class="sr-only" role="status">${S.say || ''}</p>
+            <p>${K.prompt}</p>
+            ${logHtml()}
+          </article>
+          <div class="tray">
+            ${left > 0
+              ? `<p class="tray__t">${K.ask || 'Что спросить свидетеля?'} Вопросов осталось: ${left}.</p>
+                 <div class="tray__chips">${free.map((q) => `<button class="chip" data-act="qpick" data-id="${q.id}" aria-pressed="${S.picks[0] === q.id}"><span class="chip__t">${q.text}</span></button>`).join('')}</div>`
+              : `<p class="tray__t">Вопросы закончились.</p><p class="tray__p">${K.after || 'Суд просит вас сесть.'}</p>`}
+          </div>
+        </div>
+        <footer class="dock">
+          ${left > 0
+            ? `<button class="btn" data-act="qask" ${S.picks[0] ? '' : 'disabled'}>Задать вопрос</button><button class="btn btn--quiet" data-act="forward">Закончить допрос</button>`
+            : '<button class="btn" data-act="forward">Дальше</button>'}
         </footer>`);
     },
 
@@ -455,7 +485,7 @@
       const o = K.options[S.choice.pick];
       S.choice.done = true; S.choice.ok = !!o.ok;
       if (o.ok) S.found.add('k');
-      S.hours = Math.max(0, S.hours - (o.cost ?? (o.ok ? 0 : K.missCost ?? 2)));
+      S.hours = Math.max(0, S.hours + (o.d !== undefined ? o.d : -(o.cost ?? (o.ok ? 0 : K.missCost ?? 2))));
       S.say = o.ok ? 'Верный ход.' : 'Не сработало.';
       render();
     },
@@ -480,6 +510,21 @@
       S.lab.done = true; S.lab.ok = ok;
       if (ok) S.found.add('l'); else S.hours = Math.max(0, S.hours - (L.missCost ?? 3));
       S.say = ok ? 'Заключение принято.' : 'Заключение оспорено.';
+      render();
+    },
+    qpick: (el) => { S.picks = S.picks[0] === el.dataset.id ? [] : [el.dataset.id]; render(); },
+    qask: () => {
+      const K = C().cross;
+      const q = K.questions.find((x) => x.id === S.picks[0]);
+      if (!q || S.cross.asked.includes(q.id)) return;
+      S.cross.asked.push(q.id);
+      reply('Адвокат', q.text, 'cop');
+      reply(K.witness, q.say, 'sh');
+      if (q.note) reply('', q.note, 'note');
+      reply('', q.d >= 0 ? `Ответ в вашу пользу, +${q.d} ${unit()}` : `Ответ против вас, ${q.d} ${unit()}`, q.d >= 0 ? 'mark' : 'loss');
+      S.hours = Math.max(0, S.hours + q.d);
+      S.say = q.d >= 0 ? 'Ответ в вашу пользу.' : 'Ответ против вас.';
+      S.picks = [];
       render();
     },
     card: (el) => { S.picks = S.picks[0] === el.dataset.id ? [] : [el.dataset.id]; render(); if (S.picks[0]) toView('.slots'); },
