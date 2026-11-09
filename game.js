@@ -46,6 +46,12 @@
   if (!GAMES[ASKED]) { catalog(); return; }
   const GAME = ASKED;
   const CHS = GAMES[GAME];
+  // «Ваша версия»: у глав с описанием guess этот шаг идёт перед поворотом
+  CHS.forEach((c) => {
+    if (!c.guess || c.steps.includes('guess')) return;
+    const i = c.steps.indexOf('turn');
+    if (i > -1) { c.steps.splice(i, 0, 'guess'); c.img = { ...c.img, guess: c.img.guess || c.img.interview || c.img.turn || c.img.desk }; }
+  });
   const START_HOURS = 24;
 
   // Имя врача скрыто до финала. В текстах глав стоят метки ⟦имя⟧ и ⟦полное⟧ (к метке можно дописывать падежное окончание).
@@ -58,7 +64,7 @@
   const blank = (ch, hours) => ({
     ch, step: CHS[ch].steps[0], hours,
     seen: new Set(), found: new Set(), round: 0, open: null, picks: [], log: [],
-    placed: {}, ver: {}, tlFails: 0, dos: { on: false, tab: 'fav', doc: null }, fav: new Set(), room: null, drawer: null, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
+    placed: {}, ver: {}, tlFails: 0, guess: { pick: null, done: false }, dos: { on: false, tab: 'fav', doc: null }, fav: new Set(), room: null, drawer: null, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
     opener: { pick: null, done: false, ok: false }, choice: { pick: null, done: false, ok: false }, cross: { asked: [] }, lab: { phase: 'tests', run: [], pick: [], done: false, ok: false }, misses: 0, partial: [], deadline: null, closed: false, notice: '', noticeNext: '',
   });
   // Прогресс лежит в localStorage этого браузера: у каждого игрока свой, между устройствами не переносится.
@@ -139,6 +145,7 @@
   const knownList = () => {
     const c = C(); const out = [];
     if (c.opener && S.opener.done && S.opener.ok) out.push({ h: c.opener.title, t: c.opener.hit });
+    if (c.guess && S.guess.done) out.push({ h: 'Ваша версия', t: c.guess.options[S.guess.pick].title });
     (c.interview || []).forEach((q, i) => { if (!q.locked && S.found.has(i)) out.push({ h: `Допрос, вопрос ${i + 1}`, t: q.note || q.hit }); });
     if (c.lab && S.lab.done && S.lab.ok) out.push({ h: c.lab.title, t: c.lab.okText });
     if (c.choice && S.choice.done && S.choice.ok) out.push({ h: c.choice.title, t: c.choice.options[S.choice.pick].out });
@@ -178,6 +185,10 @@
     const c = C(); const it = [];
     const add = (ok, head, text) => it.push(`<li class="debrief__item"><span class="debrief__mark debrief__mark--${ok ? 'ok' : 'miss'}">${ok ? 'Верно' : 'Пропущено'}</span> <b>${head}.</b> ${text}</li>`);
     if (c.opener) add(S.opener.ok, c.opener.title, S.opener.ok ? c.opener.hit : c.opener.miss);
+    if (c.guess && S.guess.done) {
+      const o = c.guess.options[S.guess.pick];
+      it.push(`<li class="debrief__item"><span class="debrief__mark debrief__mark--${o.skip ? 'skip' : o.ok ? 'ok' : 'miss'}">${o.skip ? 'Без версии' : o.ok ? 'Подтвердилась' : 'Не подтвердилась'}</span> <b>Ваша версия: «${o.title}».</b> ${o.skip ? c.guess.skip : o.ok ? c.guess.hit : c.guess.miss}</li>`);
+    }
     if (c.timeline) add(true, c.timeline.title, S.tlFails ? `Порядок собран, проверок с ошибкой: ${S.tlFails}.` : 'Порядок собран с первой проверки.');
     if (c.audit) {
       const rows = c.audit.rows;
@@ -519,6 +530,34 @@
         </footer>`);
     },
 
+    guess: () => {
+      const G = C().guess;
+      const st = S.guess;
+      const o = st.pick === null ? null : G.options[st.pick];
+      return scene('guess', `
+        ${bar()}
+        ${notice()}
+        <div class="room">
+          <article class="paper paper--transcript" aria-label="${G.title || 'Ваша версия'}">
+            <h2>${G.title || 'Ваша версия'}</h2>
+            <p class="sr-only" role="status">${S.say || ''}</p>
+            <p>${G.prompt}</p>
+            ${st.done ? `<p class="mark"><span class="stamp">Записано</span></p><p>${G.saved || 'Версия записана в блокнот. Посмотрим, подтвердится ли она.'}</p>` : ''}
+          </article>
+          <div class="tray">
+            <p class="tray__t">${st.done ? 'Ваша версия' : 'Выбери версию. Это не стоит часов.'}</p>
+            <div class="tray__chips">
+              ${G.options.map((x, i) => `<button class="chip" data-act="gpick" data-i="${i}" aria-pressed="${st.pick === i}" ${st.done ? 'disabled' : ''}><span class="chip__t">${x.title}</span>${x.text ? `<span class="chip__s">${x.text}</span>` : ''}</button>`).join('')}
+            </div>
+          </div>
+        </div>
+        <footer class="dock">
+          ${st.done
+            ? '<button class="btn" data-act="forward">Дальше</button>'
+            : `<button class="btn" data-act="ganswer" ${st.pick === null ? 'disabled' : ''}>Записать версию${o ? `: ${o.title}` : ''}</button>`}
+        </footer>`);
+    },
+
     turn: () => scene('turn', `
       ${bar()}
       ${notice()}
@@ -641,6 +680,8 @@
       render();
     },
     labbasis: () => { S.lab.phase = 'basis'; S.lab.pick = []; render(); },
+    gpick: (el) => { if (!S.guess.done) { S.guess.pick = +el.dataset.i; render(); } },
+    ganswer: () => { if (S.guess.pick === null || S.guess.done) return; S.guess.done = true; S.say = 'Версия записана.'; render(); },
     labback: () => { S.lab.phase = 'tests'; S.lab.pick = []; render(); },
     labpick: (el) => {
       const id = el.dataset.id; const need = Math.min(C().lab.need, S.lab.run.length);
@@ -772,7 +813,7 @@
   };
 
   // Двойной щелчок по «Решить» или «Дальше»: вторая половина попадала бы на новую кнопку и пропускала результат ответа.
-  const COMMIT = new Set(['check', 'forward', 'nextch', 'oanswer', 'ckanswer', 'labsubmit', 'submit', 'present', 'skip', 'accept', 'qask']);
+  const COMMIT = new Set(['ganswer', 'check', 'forward', 'nextch', 'oanswer', 'ckanswer', 'labsubmit', 'submit', 'present', 'skip', 'accept', 'qask']);
   let lastCommit = 0;
   app.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');

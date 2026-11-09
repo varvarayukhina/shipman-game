@@ -385,3 +385,4 @@ a.btn { display: inline-block; text-decoration: none; }
 .stage__note { margin: 0; padding: 8px 14px; text-align: center; background: var(--bar); border: 1px solid var(--bar-line); border-radius: 3px; }
 .dossier .fld__tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 0; scrollbar-width: thin; }
 .dossier .fld__tab { flex: 0 0 auto; max-width: 75vw; }
+.debrief__mark--skip { background: #e4e0d2; }
