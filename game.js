@@ -21,9 +21,9 @@
         <article class="case">
           <img src="${m.img}" width="1672" height="941" alt="${m.alt}">
           <div class="case__body">
+            <p class="case__tag">${m.tag}</p>
             <h2>Дело №${n}. ${m.title}</h2>
             <p>${m.teaser}</p>
-            <p class="case__meta">${m.meta}</p>
             <a class="btn" href="?game=${n}">${label}</a>
           </div>
         </article>`;
@@ -34,7 +34,7 @@
         <div class="catalog">
           <header class="paper paper--typed paper--memo catalog__head">
             <h1>ДЕЛА</h1>
-            <p>Игры-расследования по мотивам реальных закрытых дел. Читаешь документы, ловишь противоречия, собираешь доказательства. Имена и названия изменены, а какое это было дело, откроется в финале. Угадаешь раньше?</p>
+            <p>Детективные игры по настоящим делам. Вы следователь: читаете документы, допрашиваете, собираете доказательства. Имена и названия изменены. Какое это было дело, откроется в конце.</p>
           </header>
           <div class="cases">${cards}</div>
         </div>

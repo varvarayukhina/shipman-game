@@ -283,4 +283,4 @@ a.btn { display: inline-block; text-decoration: none; }
 .case__body { padding: 20px 22px 24px; display: grid; gap: 12px; justify-items: start; }
 .case h2 { margin: 0; font: 700 22px/1.25 'Anonymous Pro', 'Courier New', monospace; }
 .case p { margin: 0; }
-.case .case__meta { color: var(--ink-soft); }
+.case .case__tag { font-weight: 700; color: var(--stamp); text-transform: uppercase; letter-spacing: 0.04em; }
