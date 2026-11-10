@@ -15,17 +15,20 @@
   // Каталог: главная страница без ?game. Прогресс читаем из localStorage каждой игры.
   function catalog() {
     const prog = (n) => { try { const raw = localStorage.getItem(saveKey(n)); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } };
-    const cards = Object.keys(GAMES).filter((n) => GAMES[n][0] && GAMES[n][0].meta).map((n) => {
+    const cards = Object.keys(GAMES).filter((n) => GAMES[n][0] && GAMES[n][0].meta).map((n, i) => {
       const m = GAMES[n][0].meta;
       const st = prog(n);
       const label = m.href ? 'Играть командой' : !st ? 'Начать' : st.step === 'solution' ? 'Пройдено. Сыграть снова' : `Продолжить: глава ${st.ch + 1}`;
+      const chapters = GAMES[n].length;
+      const facts = [m.time, m.href ? '' : `${chapters} ${chapters === 1 ? 'глава' : chapters < 5 ? 'главы' : 'глав'}`].filter(Boolean).join(' · ');
       return `
         <article class="case">
-          <img src="${m.img}" width="1672" height="941" alt="${m.alt}">
+          <img src="${m.img}" width="1672" height="941" alt="${m.alt}" ${i ? 'loading="lazy"' : ''}>
           <div class="case__body">
             <p class="case__tag">${m.tag}</p>
             <h2>Дело №${n}. ${m.title}</h2>
             <p>${m.teaser}</p>
+            ${facts ? `<p class="case__facts">${facts}</p>` : ''}
             <a class="btn" href="${m.href || `?game=${n}`}">${label}</a>
           </div>
         </article>`;
@@ -36,7 +39,9 @@
         <div class="catalog">
           <header class="paper paper--typed paper--memo catalog__head">
             <h1>ДЕЛА</h1>
-            <p>Детективные игры по настоящим делам. Вы следователь: читаете документы, допрашиваете, собираете доказательства. Имена и названия изменены. Какое это было дело, откроется в конце.</p>
+            <p>Детективные игры по настоящим делам. Имена изменены, какое это было дело, откроется в конце.</p>
+            <ol class="catalog__how"><li><b>1</b>Читаете бумаги</li><li><b>2</b>Допрашиваете</li><li><b>3</b>Доказываете</li></ol>
+            <p class="case__facts">${Object.keys(GAMES).length} дел · от 20 минут до часа · прогресс сохраняется на устройстве</p>
           </header>
           <div class="cases">${cards}</div>
         </div>
@@ -112,6 +117,7 @@
   const gated = () => PAYWALL && !!C().gate && !hasAccess();
   const total = (c) => (c.opener ? 1 : 0) + (c.choice ? 1 : 0) + (c.lab ? 1 : 0) + (c.interview || []).filter((q) => !q.locked).length;
   const unit = () => (C().clock && C().clock.unit) || 'ч';
+  const unitEnd = () => `${unit().replace(/\.$/, '')}.`; // единица в конце предложения: «2 дн.» а не «2 дн..»
 
   // Таймер чтения («архив закрывается»). Дедлайн хранится временем, обновление страницы его не сбрасывает.
   // «Без таймера» (доступность): кнопка на столе, выбор запоминается.
@@ -123,6 +129,8 @@
   const notice = () => (S.notice ? `<p class="notice" role="status">${S.notice}</p>` : '');
   const body = (d) => (typeof d.html === 'function' ? d.html(S) : d.html);
   const paper = (d) => `<article class="paper paper--${d.kind}">${body(d)}</article>`;
+  const fileTag = () => `<span class="file-tag">${C().name} · ${C().title}</span>`;
+  const attach = (src, html) => (src && !/<(figure|img)\b/.test(html) ? `<figure class="photo photo--attach"><img src="${src}" width="1400" height="788" alt=""></figure>` : '');
   const scene = (step, inner) => `<section class="scene" style="--bg:url(${C().img[step] || C().img.desk})">${inner}</section>`;
 
   // Картотека: комнаты → ящики → папки (бумаги). Описание лежит в archive.js; без него все бумаги в одном ящике.
@@ -160,7 +168,7 @@
     const canRead = (id) => !(c.timed && S.closed && !S.seen.has(id));
     const tab = S.dos.tab;
     const ids = tab === 'fav' ? favs : tab === 'all' ? Object.keys(c.documents).filter(canRead) : [];
-    const open = ids.includes(S.dos.doc) ? S.dos.doc : null;
+    const open = ids.includes(S.dos.doc) ? S.dos.doc : (ids[0] || null);
     let inner;
     if (tab === 'inbox') {
       const inb = inboxList();
@@ -298,7 +306,7 @@
     }
     if (!it.length) return '';
     return `<article class="paper paper--form debrief"><h2>Разбор главы</h2><ul class="debrief__list">${it.join('')}</ul>
-      <p class="debrief__total">${c.clock.label}: ${S.hours} ${unit()}. Промахов на допросе: ${S.misses}.</p></article>`;
+      <p class="debrief__total">${c.clock.label}: ${S.hours} ${unitEnd()} Промахов на допросе: ${S.misses}.</p></article>`;
   };
 
   const bar = () => {
@@ -309,7 +317,7 @@
       <span class="bar__item"><b>${c.clock.label}</b> <span class="num">${S.hours}</span> ${unit()}</span>
       ${timerOn() && S.deadline ? `<span class="bar__item"><b>${c.timedLabel}</b> <span class="num" id="countdown" role="timer">${fmt(left())}</span></span>` : ''}
       ${c.interview || c.opener || c.choice || c.lab ? `<span class="bar__item"><b>${c.scoreLabel || 'Противоречий'}</b> <span class="num">${S.found.size}</span> из ${total(c)}</span>` : ''}
-      ${S.step === 'desk' ? '' : `<button class="bar__btn" data-act="dossier">Досье${favIds().length ? ` ★${favIds().length}` : ''}</button>`}
+      ${S.step === 'desk' || S.step === 'opener' ? '' : `<button class="bar__btn" data-act="dossier">Досье${favIds().length ? ` ★${favIds().length}` : ''}</button>`}
     </header>`;
   };
 
@@ -418,7 +426,7 @@
             ${st.done ? '' : basis
               ? `<p class="tray__t">Что лежит в основе заключения? Выбери ${needN}. Выбрано: ${st.pick.length}.</p>
                  <div class="tray__chips">${ran.map((t) => `<button class="chip" data-act="labpick" data-id="${t.id}" aria-pressed="${st.pick.includes(t.id)}"><span class="chip__t">${t.name}</span><span class="chip__s">${t.short}</span></button>`).join('')}</div>`
-              : `<p class="tray__t">Пробы. Осталось ${S.hours} ${unit()}.</p>
+              : `<p class="tray__t">Пробы. Осталось ${S.hours} ${unitEnd()}</p>
                  <div class="tray__chips">${L.tests.map((t) => { const used = st.run.includes(t.id); const cant = !used && t.cost > S.hours; return `<button class="chip" data-act="labrun" data-id="${t.id}" ${used || cant ? 'disabled' : ''}><span class="chip__t">${t.name}</span><span class="chip__s">${used ? 'проведена' : cant ? 'не хватает времени' : `${t.cost} ${unit()}`}</span></button>`; }).join('')}</div>`}
           </div>
         </div>
@@ -462,7 +470,7 @@
 
     intro: () => scene('intro', `
       <div class="stage stage--center">
-        <article class="paper paper--typed paper--memo">${C().intro.html}</article>
+        <article class="paper paper--typed paper--memo">${fileTag()}${attach(C().img.intro, C().intro.html)}${C().intro.html}</article>
         <button class="btn" data-act="forward">${C().intro.button}</button>
       </div>`),
 
@@ -522,7 +530,7 @@
           <article class="paper paper--form" aria-label="${T.title}">
             <h2>${T.title}</h2>
             <p>${T.hint}</p>
-            <p>Когда все слоты заполнены, нажми «Проверить порядок»: верные карточки закрепятся, неверные вернутся в лоток. Первая проверка с ошибкой бесплатная, дальше каждая стоит ${T.missCost}&nbsp;${unit()}.</p>
+            <p>Когда все слоты заполнены, нажми «Проверить порядок»: верные карточки закрепятся, неверные вернутся в лоток. Первая проверка с ошибкой бесплатная, дальше каждая стоит ${T.missCost}&nbsp;${unitEnd()}</p>
             <p class="tl__msg" role="status">${S.tlMsg || `Закреплено ${nVer} из ${nAll}.`}</p>
             ${S.picks[0] ? `<p class="tl__pick" role="status">Выбрано: <b>${T.events.find((e) => e.id === S.picks[0]).text}</b>${S.tlFails ? ` Время ищи в: ${T.events.find((e) => e.id === S.picks[0]).src}.` : ''}</p>` : ''}
             <ol class="slots">
@@ -667,7 +675,7 @@
       const next = CHS[S.ch + 1];
       return scene('end', `
         <div class="stage stage--center">
-          <article class="paper paper--typed paper--memo">${c.end.html(S.found.size, total(c), S.hours, S)}${c.end.real ? `<p class="real"><span class="stamp">Это было на самом деле</span> ${c.end.real}</p>` : ''}</article>
+          <article class="paper paper--typed paper--memo">${fileTag()}${c.end.html(S.found.size, total(c), S.hours, S)}${c.end.real ? `<p class="real"><span class="stamp">Это было на самом деле</span> ${c.end.real}</p>` : ''}</article>
           ${notice()}
           ${passportHtml()}
           ${debriefHtml()}
@@ -788,7 +796,7 @@
       const t = C().lab.tests.find((x) => x.id === el.dataset.id);
       if (!t || S.lab.run.includes(t.id) || t.cost > S.hours) return;
       S.lab.run.push(t.id); S.hours -= t.cost;
-      S.say = `Проба проведена, потрачено ${t.cost} ${unit()}.`;
+      S.say = `Проба проведена, потрачено ${t.cost} ${unitEnd()}`;
       render();
     },
     labbasis: () => { S.lab.phase = 'basis'; S.lab.pick = []; render(); },
@@ -849,7 +857,7 @@
       const nVer = T.slots.filter((sl, i) => !sl.locked && S.ver[i]).length;
       const free = wrong > 0 && !S.tlFails;
       if (wrong) { if (!free) S.hours = Math.max(0, S.hours - T.missCost); S.tlFails += 1; }
-      S.tlMsg = wrong ? `Верно ${nVer} из ${nAll}. Неверных: ${wrong}, они вернулись в лоток. ${free ? 'Первая проверка бесплатная.' : `Проверка стоила ${T.missCost} ${unit()}.`}` : T.done;
+      S.tlMsg = wrong ? `Верно ${nVer} из ${nAll}. Неверных: ${wrong}, они вернулись в лоток. ${free ? 'Первая проверка бесплатная.' : `Проверка стоила ${T.missCost} ${unitEnd()}`}` : T.done;
       S.picks = [];
       render();
       toView('.tl__msg');
@@ -901,8 +909,8 @@
         S.misses += 1;
         reply(c.suspect, trap ? trap.say : q.miss, 'sh');
         if (trap && trap.note) reply('', trap.note, 'note');
-        reply('', trap ? `Бумага сработала против вас. Потеряно ${cost} ${unit()}.` : `Мимо. Потеряно ${cost} ${unit()}.`, 'loss');
-        S.say = `${trap ? 'Бумага сработала против вас.' : 'Мимо.'} Потеряно ${cost} ${unit()}.`;
+        reply('', trap ? `Бумага сработала против вас. Потеряно ${cost} ${unitEnd()}` : `Мимо. Потеряно ${cost} ${unitEnd()}`, 'loss');
+        S.say = `${trap ? 'Бумага сработала против вас.' : 'Мимо.'} Потеряно ${cost} ${unitEnd()}`;
       }
       next();
     },
