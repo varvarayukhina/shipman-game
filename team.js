@@ -198,7 +198,7 @@
             ${lead
               ? r.parts.map((p, k) => `<p class="tray__t">${k + 1}. ${p.ask}</p>
                  <div class="tray__chips">${p.options.map((o, i) => `<button class="chip" data-act="pick" data-k="${k}" data-i="${i}" aria-pressed="${S.pick[k] === i}" ${done ? 'disabled' : ''}><span class="chip__t">${o.t}</span></button>`).join('')}</div>`).join('')
-              : `<p class="tray__t">Три части ответа. Выбирает ведущий.</p>
+              : `<p class="tray__t">Три части ответа. Выбирает ведущий. К следующему вопросу переходите, когда он объявит ответ.</p>
                  ${r.parts.map((p, k) => `<p class="tray__p"><b>${k + 1}. ${p.ask}</b></p><ul>${p.options.map((o) => `<li>${o.t}</li>`).join('')}</ul>`).join('')}`}
           </div>
         </div>

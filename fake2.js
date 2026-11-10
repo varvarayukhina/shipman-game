@@ -4,6 +4,12 @@
   const D1 = window.W1.documents;
   window.W2 = {
     name: 'Глава 2', title: 'Признание',
+    gate: {
+      title: 'Дальше платная часть',
+      html: `
+        <p>Главы 1 и 2 бесплатные. Впереди ещё две: пробы в лаборатории и суд.</p>
+        <p>Оплата пока не подключена.</p>`,
+    },
     steps: ['intro', 'desk', 'choice', 'turn', 'end'],
     img: { intro: 'img/studio.jpg', desk: 'img/case-desk.jpg', choice: 'img/interview-room.jpg', turn: 'img/case-desk.jpg', end: 'img/studio.jpg' },
     clock: { label: 'Дней до допроса', missCost: 2, unit: 'дн.' },

@@ -4,6 +4,12 @@
   const D1 = window.CH1.documents;
   window.CH2 = {
     name: 'Глава 2', title: 'Утро 24 июня',
+    gate: {
+      title: 'Дальше платная часть',
+      html: `
+        <p>Главы 1 и 2 бесплатные. Впереди ещё две: копия сервера клиники с журналом правок, новый арест по трём делам, чьё это было дело и сколько их было на самом деле.</p>
+        <p>Оплата пока не подключена.</p>`,
+    },
     steps: ['intro', 'desk', 'timeline', 'interview', 'turn', 'end'],
     img: { intro: 'img/living-room.jpg', desk: 'img/case-desk.jpg', timeline: 'img/case-desk.jpg', interview: 'img/interview-room.jpg', turn: 'img/surgery-office.jpg', end: 'img/living-room.jpg' },
     clock: { label: 'Срок задержания', missCost: 3, out: 'Срок задержания истёк. Адвокат уводит его из комнаты, остальные вопросы не заданы.' },
@@ -159,7 +165,7 @@
             <tr><td>23.06.98</td><td>Выглядит нездоровой. Взять кровь завтра в 8:30, для исследования.</td></tr>
           </tbody>
         </table>
-        <span class="hand">Записи за полгода до смерти. Алиби нет, зато есть бумага. Бумаге судья поверит быстрее, чем соседке.</span>`,
+        <span class="hand">Записи за полгода до смерти. Проверить, когда они сохранены на сервере.</span>`,
     },
 
     end: {

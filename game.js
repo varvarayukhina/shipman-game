@@ -675,7 +675,7 @@
       const next = CHS[S.ch + 1];
       return scene('end', `
         <div class="stage stage--center">
-          <article class="paper paper--typed paper--memo">${fileTag()}${c.end.html(S.found.size, total(c), S.hours, S)}${c.end.real ? `<p class="real"><span class="stamp">Это было на самом деле</span> ${c.end.real}</p>` : ''}</article>
+          <article class="paper paper--typed paper--memo">${fileTag()}${S.hours <= 0 ? `<p class="mark"><span class="stamp">${(c.clock.label || 'Время').replace(/^часов /i, '')}: ноль</span></p><p>${c.clock.zero || 'Запас времени кончился. Следующую главу вы начинаете без права на ошибку.'}</p>` : ''}${c.end.html(S.found.size, total(c), S.hours, S)}${c.end.real ? `<p class="real"><span class="stamp">Это было на самом деле</span> ${c.end.real}</p>` : ''}</article>
           ${notice()}
           ${passportHtml()}
           ${debriefHtml()}
