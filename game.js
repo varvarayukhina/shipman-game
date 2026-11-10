@@ -64,12 +64,13 @@
   const blank = (ch, hours) => ({
     ch, step: CHS[ch].steps[0], hours,
     seen: new Set(), found: new Set(), round: 0, open: null, picks: [], log: [],
-    placed: {}, ver: {}, tlFails: 0, guess: { pick: null, done: false }, dos: { on: false, tab: 'fav', doc: null }, fav: new Set(), room: null, drawer: null, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
+    placed: {}, ver: {}, tlFails: 0, guess: { pick: null, done: false }, inbox: { got: [], toast: null }, recap: false, seenAt: 0, dos: { on: false, tab: 'fav', doc: null }, fav: new Set(), room: null, drawer: null, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
     opener: { pick: null, done: false, ok: false }, choice: { pick: null, done: false, ok: false }, cross: { asked: [] }, lab: { phase: 'tests', run: [], pick: [], done: false, ok: false }, misses: 0, partial: [], deadline: null, closed: false, notice: '', noticeNext: '',
   });
   // Прогресс лежит в localStorage этого браузера: у каждого игрока свой, между устройствами не переносится.
   const KEY = saveKey(GAME);
   const save = () => {
+    S.seenAt = Date.now();
     try { localStorage.setItem(KEY, JSON.stringify(S, (k, v) => (v instanceof Set ? { set: [...v] } : v))); }
     catch (e) { console.warn('progress not saved:', e.message); }
   };
@@ -88,6 +89,8 @@
       if (!o.ver) o.ver = Object.fromEntries(Object.keys(o.placed || {}).map((i) => [i, 1]));
       o.ver = Object.fromEntries(Object.keys(o.ver).filter((i) => (o.placed || {})[i]).map((i) => [i, 1]));
       o.dos = { on: false, tab: 'fav', doc: null };
+      // вернулись после перерыва: покажем «Вы остановились здесь»
+      o.recap = !!o.seenAt && Date.now() - o.seenAt > 30 * 60 * 1000 && !['cover', 'intro'].includes(o.step);
       return { ...blank(o.ch, o.hours), ...o };
     } catch (e) { console.warn('progress not loaded:', e.message); return null; }
   };
@@ -159,7 +162,11 @@
     const ids = tab === 'fav' ? favs : tab === 'all' ? Object.keys(c.documents).filter(canRead) : [];
     const open = ids.includes(S.dos.doc) ? S.dos.doc : null;
     let inner;
-    if (tab === 'known') {
+    if (tab === 'inbox') {
+      const inb = inboxList();
+      const cur = inb.find((m) => m.id === S.dos.doc) || inb[inb.length - 1];
+      inner = `<div class="fld"><div class="fld__tabs">${inb.map((m) => `<button class="fld__tab" data-act="dmsg" data-id="${m.id}" aria-pressed="${cur && cur.id === m.id}"><span class="fld__tt">${KIND[m.kind] || 'Сообщение'}</span><span class="fld__ts">${m.from}</span></button>`).join('')}</div><div class="fld__body">${cur ? msgHtml(cur) : ''}</div></div>`;
+    } else if (tab === 'known') {
       const k = knownList();
       inner = k.length ? `<ol class="known">${k.map((x) => `<li><b>${x.h}.</b> ${x.t}</li>`).join('')}</ol>` : '<article class="paper paper--form"><p>Пока ничего не найдено. Противоречия появятся здесь, когда вы их зафиксируете.</p></article>';
     } else if (!ids.length) {
@@ -170,7 +177,8 @@
           <div class="fld__body">${open ? docHtml(open) : '<article class="paper paper--form fld__empty"><p>Выбери папку.</p></article>'}</div>
         </div>`;
     }
-    const T = [['fav', `Избранное${favs.length ? ` (${favs.length})` : ''}`], ['all', 'Все бумаги'], ['known', 'Что известно']];
+    const inb = inboxList();
+    const T = [['fav', `Избранное${favs.length ? ` (${favs.length})` : ''}`], ['all', 'Все бумаги'], ['known', 'Что известно'], ...(inb.length ? [['inbox', `Входящие (${inb.length})`]] : [])];
     return `<div class="dossier" role="dialog" aria-modal="true" aria-labelledby="dossier-h">
       <div class="dossier__sheet">
         <div class="dossier__head"><h2 id="dossier-h" tabindex="-1">Досье</h2><button class="btn btn--quiet" data-act="dclose">Закрыть</button></div>
@@ -178,6 +186,86 @@
         ${inner}
       </div>
     </div>`;
+  };
+
+  // Входящие: SMS, звонки и кадры камер приходят уведомлением и лежат в досье
+  const inboxList = () => (C().inbox || []).filter((m) => S.inbox.got.includes(m.id));
+  const KIND = { sms: 'SMS', call: 'Звонок', cctv: 'Камера' };
+  const msgHtml = (m) => {
+    const head = `<p class="msg__meta"><b>${KIND[m.kind] || 'Сообщение'}</b> · ${m.from}${m.when ? ` · ${m.when}` : ''}</p>`;
+    if (m.kind === 'cctv') {
+      return `<article class="msg msg--cctv">${head}<figure class="cctv"><img src="${m.img}" width="1400" height="788" loading="lazy" alt="${m.alt || ''}"><span class="cctv__cam">${m.cam || 'КАМЕРА'}</span><span class="cctv__time"><i class="cctv__rec" aria-hidden="true"></i>${m.when || ''}</span></figure><p>${m.text}</p></article>`;
+    }
+    if (m.kind === 'call') {
+      return `<article class="msg msg--call">${head}<p class="msg__text">${m.text}</p>${m.audio ? `<audio controls preload="none" src="${m.audio}"></audio>` : ''}</article>`;
+    }
+    return `<article class="msg msg--sms">${head}<p class="msg__bubble">${m.text}</p></article>`;
+  };
+  const fireInbox = (evt) => {
+    S.inbox.toast = null;
+    (C().inbox || []).forEach((m) => { if (m.on === evt && !S.inbox.got.includes(m.id)) { S.inbox.got.push(m.id); S.inbox.toast = m.id; } });
+  };
+  const toastHtml = () => {
+    const m = S.inbox.toast && (C().inbox || []).find((x) => x.id === S.inbox.toast);
+    if (!m || S.dos.on || S.recap) return '';
+    return `<div class="toast" role="status"><button class="toast__main" data-act="toast" data-id="${m.id}"><b>Входящее: ${KIND[m.kind] || 'сообщение'}</b> ${m.from}</button><button class="toast__x" data-act="tclose" aria-label="Закрыть уведомление">×</button></div>`;
+  };
+  const STEP_NOW = { desk: 'читаете бумаги', timeline: 'собираете хронологию', audit: 'проверяете таблицу', interview: 'допрос', guess: 'записываете версию', lab: 'работа в лаборатории', choice: 'выбираете ход', cross: 'допрос свидетеля', opener: 'первый вопрос', turn: 'поворот главы', end: 'финал главы' };
+  const recapHtml = () => {
+    if (!S.recap) return '';
+    const c = C(); const k = knownList();
+    const q = S.step === 'interview' ? (c.interview || [])[S.round] : null;
+    return `<div class="dossier" role="dialog" aria-modal="true" aria-labelledby="recap-h">
+      <div class="dossier__sheet">
+        <div class="dossier__head"><h2 id="recap-h" tabindex="-1">Вы остановились здесь</h2></div>
+        <article class="paper paper--form"><p><b>${c.name}, «${c.title}».</b> Сейчас: ${STEP_NOW[S.step] || 'дело'}${q && !q.locked ? `, вопрос ${S.round + 1} из ${c.interview.length}` : ''}.</p>${q && !q.locked ? `<p>Он сказал: «${q.say}»</p>` : ''}</article>
+        <h3 class="dossier__sub">Ранее в деле</h3>
+        ${k.length ? `<ol class="known">${k.map((x) => `<li><b>${x.h}.</b> ${x.t}</li>`).join('')}</ol>` : '<article class="paper paper--form"><p>Пока ничего не зафиксировано. Бумаги ждут вас в картотеке.</p></article>'}
+        <div class="fld__acts"><button class="btn" data-act="rclose">Продолжить</button>${S.step === 'desk' ? '' : '<button class="btn btn--quiet" data-act="rdossier">Открыть досье</button>'}</div>
+      </div>
+    </div>`;
+  };
+
+  // Паспорт прохождения: короткий итог без спойлеров, чтобы им делиться
+  const passportRows = () => {
+    const c = C(); const rows = [];
+    const qs = (c.interview || []).map((q, i) => ({ q, i })).filter((x) => !x.q.locked);
+    if (qs.length) rows.push({ label: 'Допрос', cells: qs.map((x) => (S.found.has(x.i) ? 1 : 0)) });
+    if (c.audit) rows.push({ label: 'Таблица', text: `${S.audit.ok} из ${S.audit.total}` });
+    if (c.timeline) rows.push({ label: 'Хронология', text: S.tlFails ? `проверок с ошибкой: ${S.tlFails}` : 'с первой проверки' });
+    if (c.guess && S.guess.done) { const o = c.guess.options[S.guess.pick]; rows.push({ label: 'Версия', text: o.skip ? 'без версии' : o.ok ? 'подтвердилась' : 'не подтвердилась' }); }
+    rows.push({ label: c.clock.label, text: `${S.hours} ${unit()}` });
+    return rows;
+  };
+  const passportTitle = () => { const m = (GAMES[GAME][0] || {}).meta; return `Дело №${GAME}${m && m.title ? ` «${m.title}»` : ''}, ${C().name.toLowerCase()}`; };
+  const passportText = () => `${passportTitle()}\n${passportRows().map((r) => `${r.label}: ${r.cells ? r.cells.map((x) => (x ? '■' : '□')).join(' ') : r.text}`).join('\n')}`;
+  const passportHtml = () => `<article class="paper paper--form passport" aria-label="Паспорт прохождения"><h2>Паспорт прохождения</h2><p class="passport__t">${passportTitle()}</p>
+    <ul class="passport__rows">${passportRows().map((r) => `<li><span class="passport__l">${r.label}</span> ${r.cells ? `<span class="passport__sq" role="img" aria-label="${r.cells.filter(Boolean).length} из ${r.cells.length}">${r.cells.map((x) => `<i class="${x ? 'on' : 'off'}"></i>`).join('')}</span>` : `<b>${r.text}</b>`}</li>`).join('')}</ul>
+    <div class="fld__acts"><button class="btn" data-act="share">Поделиться</button><button class="btn btn--quiet" data-act="shareimg">Сохранить картинку</button></div></article>`;
+  const passportImage = async () => {
+    try { await document.fonts.load('700 56px "Anonymous Pro"'); } catch (e) { console.warn('font not ready:', e.message); }
+    const W = 1080, H = 1350; const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+    g.fillStyle = '#16120e'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#ebe7da'; g.fillRect(70, 90, W - 140, 1070);
+    g.fillStyle = '#7a1515'; g.font = '700 92px "Anonymous Pro", monospace'; g.fillText('ПАСПОРТ ДЕЛА', 120, 220);
+    g.fillStyle = '#15120e'; g.font = '700 52px "Anonymous Pro", monospace';
+    const t = passportTitle(); g.fillText(t.length > 30 ? `${t.slice(0, 29)}…` : t, 120, 305);
+    g.fillRect(120, 340, W - 240, 6);
+    const rows = passportRows(); const top = 400; const step = Math.min(220, (1100 - top) / rows.length);
+    rows.forEach((r, k) => {
+      const y = top + k * step + 64;
+      g.fillStyle = '#15120e'; g.font = '700 54px Arimo, Arial, sans-serif'; g.fillText(r.label, 120, y);
+      if (r.cells) {
+        const sz = Math.min(96, (W - 240 - 60) / r.cells.length - 14);
+        r.cells.forEach((x, i) => { g.fillStyle = x ? '#2f6b2f' : '#ebe7da'; g.fillRect(120 + i * (sz + 14), y + 24, sz, sz); g.strokeStyle = '#15120e'; g.lineWidth = 6; g.strokeRect(120 + i * (sz + 14), y + 24, sz, sz); });
+      } else { g.font = '400 56px Arimo, Arial, sans-serif'; g.fillStyle = '#15120e'; g.fillText(r.text, 120, y + 76); }
+    });
+    g.save(); g.translate(680, 1100); g.rotate(-0.12); g.strokeStyle = '#7a1515'; g.fillStyle = '#7a1515'; g.lineWidth = 8;
+    g.font = '700 64px "Anonymous Pro", monospace'; const st = 'ПРОЙДЕНО'; const tw = g.measureText(st).width;
+    g.strokeRect(-20, -62, tw + 40, 90); g.fillText(st, 0, 0); g.restore();
+    g.fillStyle = '#ebe7da'; g.font = '700 46px Arimo, Arial, sans-serif'; g.fillText('Детективные игры по реальным делам', 70, H - 110);
+    g.font = '400 42px Arimo, Arial, sans-serif'; g.fillText(location.host || 'detective', 70, H - 50);
+    return new Promise((res) => cv.toBlob(res, 'image/png'));
   };
 
   // Разбор главы: что игрок понял верно, что пропустил и где это лежало
@@ -580,6 +668,8 @@
       return scene('end', `
         <div class="stage stage--center">
           <article class="paper paper--typed paper--memo">${c.end.html(S.found.size, total(c), S.hours, S)}${c.end.real ? `<p class="real"><span class="stamp">Это было на самом деле</span> ${c.end.real}</p>` : ''}</article>
+          ${notice()}
+          ${passportHtml()}
           ${debriefHtml()}
           ${next && gated() ? `<article class="paper paper--form paywall"><h2>${c.gate.title}</h2>${c.gate.html}</article>` : ''}
           ${next && !gated() ? `<button class="btn" data-act="nextch">Дальше: ${next.name}, «${next.title}»</button>` : ''}
@@ -591,13 +681,13 @@
     },
   };
 
-  const go = (step) => { S.step = step; S.picks = []; S.notice = S.noticeNext || ''; S.noticeNext = ''; render(); window.scrollTo(0, 0); };
+  const go = (step) => { S.step = step; S.picks = []; S.notice = S.noticeNext || ''; S.noticeNext = ''; fireInbox(`step:${step}`); render(); window.scrollTo(0, 0); };
   const forward = () => { const st = C().steps; go(st[st.indexOf(S.step) + 1]); };
 
   function render() {
     if (timerOn() && !S.deadline) S.deadline = Date.now() + C().timed * 1000;
-    app.innerHTML = named(views[S.step]() + dossierHtml());
-    document.body.classList.toggle('has-dossier', S.dos.on);
+    app.innerHTML = named(views[S.step]() + dossierHtml() + recapHtml() + toastHtml());
+    document.body.classList.toggle('has-dossier', S.dos.on || S.recap);
     const t = document.querySelector('.paper--transcript');
     if (t) t.scrollTop = t.scrollHeight;
     save();
@@ -640,6 +730,28 @@
       if (matchMedia('(max-width: 899px)').matches) document.querySelector('.fld__body')?.scrollIntoView({ block: 'start' });
     },
     dossier: () => { S.dos = { on: true, tab: favIds().length ? 'fav' : 'all', doc: null }; render(); document.getElementById('dossier-h')?.focus(); },
+    toast: (el) => { S.inbox.toast = null; S.dos = { on: true, tab: 'inbox', doc: el.dataset.id }; render(); document.getElementById('dossier-h')?.focus(); },
+    tclose: () => { S.inbox.toast = null; render(); },
+    dmsg: (el) => { S.dos.doc = el.dataset.id; render(); },
+    rclose: () => { S.recap = false; render(); },
+    rdossier: () => { S.recap = false; S.dos = { on: true, tab: favIds().length ? 'fav' : 'all', doc: null }; render(); document.getElementById('dossier-h')?.focus(); },
+    share: async () => {
+      const text = passportText(); const url = location.href.split(/[?#]/)[0];
+      try { if (navigator.share) { await navigator.share({ text, url }); return; } }
+      catch (e) { if (e && e.name === 'AbortError') return; console.warn('share failed:', e && e.message); }
+      try { await navigator.clipboard.writeText(`${text}\n${url}`); S.notice = 'Паспорт скопирован. Вставьте его в чат.'; }
+      catch (e) { console.warn('copy failed:', e && e.message); S.notice = 'Не вышло скопировать. Сделайте скриншот паспорта.'; }
+      render();
+    },
+    shareimg: async () => {
+      const blob = await passportImage();
+      if (!blob) { S.notice = 'Не вышло создать картинку. Сделайте скриншот паспорта.'; render(); return; }
+      const file = new File([blob], 'passport.png', { type: 'image/png' });
+      try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } }
+      catch (e) { if (e && e.name === 'AbortError') return; console.warn('share image failed:', e && e.message); }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'passport.png'; document.body.appendChild(a); a.click(); a.remove();
+      S.notice = 'Картинка сохранена на устройство.'; render();
+    },
     dclose: () => { S.dos.on = false; render(); document.querySelector('[data-act="dossier"]')?.focus(); },
     dtab: (el) => { S.dos.tab = el.dataset.id; S.dos.doc = null; render(); },
     dopen: (el) => { const id = el.dataset.id; S.dos.doc = id; if (!(C().timed && S.closed)) S.seen.add(id); render(); },
@@ -823,14 +935,14 @@
     const was = `${S.ch}:${S.step}`;
     acts[el.dataset.act](el);
     if (COMMIT.has(el.dataset.act)) lastCommit = Date.now();
-    if (el.dataset.act === 'dossier' || el.dataset.act === 'dclose') return; // фокус уже поставлен в самом действии
+    if (['dossier', 'dclose', 'toast', 'rdossier'].includes(el.dataset.act)) return; // фокус уже поставлен в самом действии
     // render() пересобирает страницу целиком: возвращаем фокус, иначе клавиатура и скринридер теряют место
     const same = document.querySelector(sel);
     if (was === `${S.ch}:${S.step}` && same && !same.disabled) same.focus({ preventScroll: true });
     else { const h = document.querySelector('h1, h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } }
   });
 
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.dos.on) acts.dclose(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.dos.on) acts.dclose(); else if (e.key === 'Escape' && S.recap) acts.rclose(); });
   app.addEventListener('click', (e) => { if (e.target.classList && e.target.classList.contains('dossier')) acts.dclose(); });
   render();
 })();
