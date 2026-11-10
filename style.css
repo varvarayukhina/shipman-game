@@ -437,4 +437,5 @@ a.btn { display: inline-block; text-decoration: none; }
 .catalog__how { list-style: none; margin: 4px 0 14px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; font: 700 16px/1.3 Arimo, Arial, sans-serif; }
 .catalog__how li { display: grid; gap: 4px; padding: 10px 10px 12px; background: #e2dccb; border: 2px solid var(--ink); border-radius: 2px; }
 .catalog__how b { font: 700 22px/1 'Anonymous Pro', 'Courier New', monospace; }
-@media (max-width: 380px) { .catalog__how { grid-template-columns: 1fr; } .catalog__how li { grid-template-columns: auto 1fr; align-items: center; } }
+.catalog__how li { overflow-wrap: normal; hyphens: none; }
+@media (max-width: 520px) { .catalog__how { grid-template-columns: 1fr; gap: 6px; } .catalog__how li { grid-template-columns: 32px 1fr; align-items: center; padding: 8px 12px; } }
