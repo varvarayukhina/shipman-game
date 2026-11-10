@@ -413,3 +413,6 @@ a.btn { display: inline-block; text-decoration: none; }
 .passport__sq { display: inline-flex; gap: 6px; }
 .passport__sq i { width: 22px; height: 22px; border: 3px solid var(--ink); background: #ebe7da; }
 .passport__sq i.on { background: #2f6b2f; }
+.passport__sq i.mid { background: linear-gradient(to bottom, #ebe7da 50%, #b8862a 50%); }
+.passport__key { margin: 0 0 12px; font-size: 16px; }
+.req__note { padding: 8px 14px; background: var(--p-form); border: 2px solid var(--ink); color: var(--ink); }

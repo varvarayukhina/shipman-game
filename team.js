@@ -67,6 +67,38 @@
     .map((x) => ({ ...x, ...sheetsOf(x.rid, S.role)[x.i] }));
   const itemsOf = (rid) => sheetsOf(rid, S.role).map((s, i) => ({ rid, i, ...s }));
 
+  // Паспорт команды: итог без ответов, чтобы им делиться. ■ с первой попытки, ▲ со второй, □ не угадали.
+  const MARK = { ok1: '■', ok2: '▲' };
+  const passportText = () => `Дело №5 «${T.title}»\nВопросы: ${T.rounds.map((r, i) => MARK[S.res[i]] || '□').join(' ')}\nОчки команды: ${score()} из ${N * 2}`;
+  const passportHtml = () => `<article class="paper paper--form passport" aria-label="Паспорт команды"><h2>Паспорт команды</h2><p class="passport__t">Дело №5 «${T.title}»</p>
+    <ul class="passport__rows"><li><span class="passport__l">Вопросы</span> <span class="passport__sq" role="img" aria-label="с первой попытки: ${T.rounds.filter((r, i) => S.res[i] === 'ok1').length}, со второй: ${T.rounds.filter((r, i) => S.res[i] === 'ok2').length}, не угадали: ${T.rounds.filter((r, i) => !MARK[S.res[i]]).length}">${T.rounds.map((r, i) => `<i class="${S.res[i] === 'ok1' ? 'on' : S.res[i] === 'ok2' ? 'mid' : 'off'}"></i>`).join('')}</span></li>
+    <li><span class="passport__l">Очки</span> <b>${score()} из ${N * 2}</b></li></ul>
+    <p class="passport__key">Закрашено: с первой попытки. Половина: со второй. Пусто: не угадали.</p>
+    <div class="fld__acts"><button class="btn" data-act="share">Поделиться</button><button class="btn btn--quiet" data-act="shareimg">Сохранить картинку</button></div></article>`;
+  const passportImage = async () => {
+    try { await document.fonts.load('700 56px "Anonymous Pro"'); } catch (e) { console.warn('font not ready:', e.message); }
+    const W = 1080, H = 1350; const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+    g.fillStyle = '#16120e'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#ebe7da'; g.fillRect(70, 90, W - 140, 1070);
+    g.fillStyle = '#7a1515'; g.font = '700 92px "Anonymous Pro", monospace'; g.fillText('ПАСПОРТ КОМАНДЫ', 110, 220);
+    g.fillStyle = '#15120e'; g.font = '700 56px "Anonymous Pro", monospace'; g.fillText(`Дело №5 «${T.title}»`, 120, 310); g.fillRect(120, 345, W - 240, 6);
+    g.font = '700 54px Arimo, Arial, sans-serif'; g.fillText('Вопросы', 120, 470);
+    const sz = 100, gap = 18;
+    T.rounds.forEach((r, i) => {
+      const x = 120 + i * (sz + gap); const k = S.res[i];
+      g.fillStyle = '#ebe7da'; g.fillRect(x, 500, sz, sz);
+      if (k === 'ok1') { g.fillStyle = '#2f6b2f'; g.fillRect(x, 500, sz, sz); } else if (k === 'ok2') { g.fillStyle = '#b8862a'; g.fillRect(x, 550, sz, 50); }
+      g.strokeStyle = '#15120e'; g.lineWidth = 7; g.strokeRect(x, 500, sz, sz);
+    });
+    g.fillStyle = '#15120e'; g.font = '700 54px Arimo, Arial, sans-serif'; g.fillText('Очки команды', 120, 780);
+    g.font = '700 150px "Anonymous Pro", monospace'; g.fillText(`${score()} из ${N * 2}`, 120, 940);
+    g.save(); g.translate(660, 1100); g.rotate(-0.12); g.strokeStyle = '#7a1515'; g.fillStyle = '#7a1515'; g.lineWidth = 8; g.font = '700 64px "Anonymous Pro", monospace';
+    const tw = g.measureText('ПРОЙДЕНО').width; g.strokeRect(-20, -62, tw + 40, 90); g.fillText('ПРОЙДЕНО', 0, 0); g.restore();
+    g.fillStyle = '#ebe7da'; g.font = '700 46px Arimo, Arial, sans-serif'; g.fillText('Командное дело для 3–5 человек', 70, H - 110);
+    g.font = '400 42px Arimo, Arial, sans-serif'; g.fillText(location.host || 'detective', 70, H - 50);
+    return new Promise((res) => cv.toBlob(res, 'image/png'));
+  };
+
   const scene = (img, inner) => `<section class="scene" style="--bg:url(${img})">${inner}</section>`;
 
   const bar = () => `
@@ -233,6 +265,7 @@
                  <ul>${T.rounds.map((r, i) => `<li>${i + 1}. ${r.title}: ${{ ok1: 'с первой попытки', ok2: 'со второй попытки', shown: 'не угадали' }[S.res[i]] || 'не отвечали'}</li>`).join('')}</ul>`
               : `<h1>ИТОГ</h1><p>Очки команды знает ведущий. Попросите его зачитать итог вслух.</p>`}
           </article>
+          ${lead ? `${note()}${passportHtml()}` : ''}
           <article class="paper paper--typed paper--memo">${T.solution}</article>
           <button class="btn btn--quiet" data-act="back">Назад к вопросам</button>
           <a class="btn btn--quiet" href="./">Все дела</a>
@@ -309,6 +342,21 @@
     back: () => {
       if (S.view === 'end') { go('round'); return; }
       if (S.round > 0) { S.round -= 1; S.in = null; reset(); render(); window.scrollTo(0, 0); }
+    },
+    share: async () => {
+      const url = pageUrl();
+      await share(passportText(), url);
+      if (!S.note) S.note = '';
+      render();
+    },
+    shareimg: async () => {
+      const blob = await passportImage();
+      if (!blob) { S.note = 'Не вышло создать картинку. Сделайте скриншот паспорта.'; render(); return; }
+      const file = new File([blob], 'passport.png', { type: 'image/png' });
+      try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; } }
+      catch (e) { if (e && e.name === 'AbortError') return; console.warn('share image failed:', e && e.message); }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'passport.png'; document.body.appendChild(a); a.click(); a.remove();
+      S.note = 'Картинка сохранена на устройство.'; render();
     },
     restart: () => {
       if (!confirm('Начать игру сначала? Прогресс на этом телефоне будет стёрт, избранное тоже.')) return;
