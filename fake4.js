@@ -4,6 +4,7 @@
 (() => {
   window.W4 = {
     name: 'Глава 4', title: 'Суд',
+    cut: { misses: 'Председатель прерывает: «Суд услышал достаточно». Остальные доводы не прозвучали.' },
     steps: ['intro', 'desk', 'interview', 'turn', 'end', 'reveal', 'solution'],
     img: { intro: 'img/lab.jpg', desk: 'img/case-desk.jpg', interview: 'img/interview-room.jpg', turn: 'img/studio.jpg', end: 'img/studio.jpg', reveal: 'img/mine.jpg', solution: 'img/lab.jpg' },
     endNext: 'Чьё это было дело?',

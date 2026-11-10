@@ -10,7 +10,7 @@
   const BG = ['img/lift-shaft.jpg', 'img/vault-wall.jpg', 'img/night-street.jpg', 'img/street-1998.jpg', 'img/interview-room.jpg', 'img/cemetery-tent.jpg'];
   const bgOf = (i) => BG[i] || 'img/case-desk.jpg';
   const role = (id) => T.roles.find((r) => r.id === id);
-  const blank = () => ({ view: 'lobby', role: null, round: 0, max: 0, tries: {}, res: {}, hist: {}, pick: [null, null, null], open: 0, fav: [], drawer: null, ask: null, in: null, note: '' });
+  const blank = () => ({ view: 'lobby', role: null, round: 0, max: 0, tries: {}, res: {}, hist: {}, pick: [null, null, null], open: 0, fav: [], drawer: null, ask: null, in: null, note: '', spoil: false });
 
   const sheetsOf = (rid, roleId) => (T.rounds[rid] && T.rounds[rid].sheets[roleId]) || [];
 
@@ -43,7 +43,10 @@
   // ссылка вида ?role=sc&round=2&sheet=1&from=lead: «запрос бумаги». Открывает телефон владельца на нужной бумаге.
   const q = new URLSearchParams(location.search);
   const asked = q.get('role');
-  if (asked && role(asked)) {
+  if (asked && role(asked) && S.role && S.role !== asked) {
+    S.note = `Это ссылка для роли «${role(asked).name}». На этом телефоне роль «${role(S.role).name}», она не изменена.`;
+    if (window.history && history.replaceState) history.replaceState(null, '', pageUrl());
+  } else if (asked && role(asked)) {
     S.role = asked;
     if (S.view === 'lobby') S.view = 'round';
     const rid = Number.parseInt(q.get('round'), 10);
@@ -188,6 +191,7 @@
       return scene(bgOf(S.round), `
         ${bar()}
         <div class="room">
+          ${S.note && !S.in && !S.ask ? `<p class="req__note" role="status">${S.note}</p>` : ''}
           <article class="paper paper--transcript" aria-label="Вопрос">
             <h2>${S.round + 1}. ${r.title}</h2>
             <p>${r.q}</p>
@@ -266,7 +270,7 @@
               : `<h1>ИТОГ</h1><p>Очки команды знает ведущий. Попросите его зачитать итог вслух.</p>`}
           </article>
           ${lead ? `${note()}${passportHtml()}` : ''}
-          <article class="paper paper--typed paper--memo">${T.solution}</article>
+          ${lead || S.spoil ? `<article class="paper paper--typed paper--memo">${T.solution}</article>` : `<article class="paper paper--form"><h2>Разбор дела</h2><p>Разбор и настоящие имена читает ведущий вслух, когда команда ответила на все вопросы.</p><button class="btn btn--quiet" data-act="spoil">Показать разбор на этом телефоне</button></article>`}
           <button class="btn btn--quiet" data-act="back">Назад к вопросам</button>
           <a class="btn btn--quiet" href="./">Все дела</a>
           <button class="btn btn--quiet" data-act="restart">Сыграть сначала</button>
@@ -274,8 +278,17 @@
     },
   };
 
+  let rendering = false;
   function render() {
-    app.innerHTML = views[S.view]();
+    try { app.innerHTML = views[S.view](); }
+    catch (e) {
+      console.error('render failed:', e);
+      if (rendering) throw e;
+      rendering = true;
+      const r = S.role; S = blank(); S.role = r; S.view = r ? 'round' : 'lobby'; S.note = 'Сохранение устарело после обновления дела. Игра начата заново.';
+      app.innerHTML = views[S.view]();
+      rendering = false;
+    }
     save();
   }
 
@@ -358,6 +371,7 @@
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'passport.png'; document.body.appendChild(a); a.click(); a.remove();
       S.note = 'Картинка сохранена на устройство.'; render();
     },
+    spoil: () => { if (!confirm('В разборе настоящие имена и ответы на все вопросы. Показать на этом телефоне?')) return; S.spoil = true; render(); },
     restart: () => {
       if (!confirm('Начать игру сначала? Прогресс на этом телефоне будет стёрт, избранное тоже.')) return;
       const r = S.role; S = blank(); S.role = r; go('lobby');

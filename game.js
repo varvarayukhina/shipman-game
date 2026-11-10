@@ -86,7 +86,12 @@
       const o = JSON.parse(raw, (k, v) => (v && !Array.isArray(v) && v.set ? new Set(v.set) : v));
       const c = CHS[o.ch];
       // старые сохранения без новых полей дополняем значениями по умолчанию
-      if (!c || !c.steps.includes(o.step) || o.round > (c.interview || []).length) return null;
+      if (!c) return null;
+      if (!c.steps.includes(o.step)) { o.step = c.steps[0]; o.round = 0; }
+      if (o.round > (c.interview || []).length) o.round = 0;
+      ['seen', 'found', 'flags', 'fav'].forEach((k) => { if (o[k] && !(o[k] instanceof Set)) o[k] = new Set(); });
+      if (!Number.isFinite(o.hours)) o.hours = c.startHours ?? START_HOURS;
+      if (!Array.isArray(o.log)) o.log = [];
       // содержание глав обновляли: расстановка событий, которой нет в хронологии, сбрасывается
       const T = c.timeline;
       if (T && Object.entries(o.placed || {}).some(([i, id]) => !T.slots[i] || T.slots[i].locked || !T.events.some((e) => e.id === id))) { o.placed = {}; o.ver = {}; o.tlMsg = ''; }
@@ -94,6 +99,13 @@
       if (!o.ver) o.ver = Object.fromEntries(Object.keys(o.placed || {}).map((i) => [i, 1]));
       o.ver = Object.fromEntries(Object.keys(o.ver).filter((i) => (o.placed || {})[i]).map((i) => [i, 1]));
       o.dos = { on: false, tab: 'fav', doc: null };
+      if (o.open && !c.documents[o.open]) o.open = null;
+      if (o.lab && c.lab) { o.lab.run = (o.lab.run || []).filter((id) => c.lab.tests.some((t) => t.id === id)); o.lab.pick = (o.lab.pick || []).filter((id) => o.lab.run.includes(id)); }
+      if (o.cross && c.cross) o.cross.asked = (o.cross.asked || []).filter((id) => c.cross.questions.some((q) => q.id === id));
+      if (o.choice && c.choice && o.choice.pick !== null && !c.choice.options[o.choice.pick]) o.choice = { pick: null, done: false, ok: false };
+      if (o.guess && c.guess && o.guess.pick !== null && !c.guess.options[o.guess.pick]) o.guess = { pick: null, done: false };
+      if (o.opener && c.opener && o.opener.pick !== null && !c.opener.options[o.opener.pick]) o.opener = { pick: null, done: false, ok: false };
+      if (o.inbox) o.inbox.got = (o.inbox.got || []).filter((id) => (c.inbox || []).some((m) => m.id === id));
       // вернулись после перерыва: покажем «Вы остановились здесь»
       o.recap = !!o.seenAt && Date.now() - o.seenAt > 30 * 60 * 1000 && !['cover', 'intro'].includes(o.step);
       return { ...blank(o.ch, o.hours), ...o };
@@ -285,7 +297,7 @@
       const o = c.guess.options[S.guess.pick];
       it.push(`<li class="debrief__item"><span class="debrief__mark debrief__mark--${o.skip ? 'skip' : o.ok ? 'ok' : 'miss'}">${o.skip ? 'Без версии' : o.ok ? 'Подтвердилась' : 'Не подтвердилась'}</span> <b>Ваша версия: «${o.title}».</b> ${o.skip ? c.guess.skip : o.ok ? c.guess.hit : c.guess.miss}</li>`);
     }
-    if (c.timeline) add(true, c.timeline.title, S.tlFails ? `Порядок собран, проверок с ошибкой: ${S.tlFails}.` : 'Порядок собран с первой проверки.');
+    if (c.timeline) add(S.tlFails <= 1, c.timeline.title, S.tlFails ? `Порядок собран, проверок с ошибкой: ${S.tlFails}.` : 'Порядок собран с первой проверки.');
     if (c.audit) {
       const rows = c.audit.rows;
       const missed = rows.filter((r, i) => r.hit && !S.flags.has(i)).map((r) => r.cells.join(', '));
@@ -469,6 +481,7 @@
     },
 
     intro: () => scene('intro', `
+      ${notice()}
       <div class="stage stage--center">
         <article class="paper paper--typed paper--memo">${fileTag()}${attach(C().img.intro, C().intro.html)}${C().intro.html}</article>
         <button class="btn" data-act="forward">${C().intro.button}</button>
@@ -504,6 +517,7 @@
       return `<section class="scene" style="--bg:url(${room.img || c.img.desk})">
         ${bar()}
         <div class="archive">
+          <h2 class="sr-only">Картотека: ${room.name}${dr ? `, ящик ${mark(dr)}` : ''}</h2>
           ${R.length > 1 ? `<nav class="rooms" aria-label="Комнаты">${R.map((r) => `<button class="rooms__btn" data-act="room" data-id="${r.id}" aria-pressed="${r.id === room.id}">${r.id === room.id ? '' : '→ '}${r.name}</button>`).join('')}</nav>` : ''}
           ${inner}
         </div>
@@ -587,7 +601,7 @@
         </div>
         <footer class="dock">
           ${done
-            ? '<button class="btn" data-act="forward">Вызвать на допрос</button>'
+            ? `<button class="btn" data-act="forward">${A.next || 'Вызвать на допрос'}</button>`
             : `<button class="btn" data-act="submit" ${S.flags.size ? '' : 'disabled'}>${A.submit}${S.flags.size ? `: отмечено ${S.flags.size}` : ''}</button>`}
         </footer>`);
     },
@@ -621,7 +635,7 @@
         <footer class="dock">
           ${q.locked
             ? `<button class="btn" data-act="accept">${q.accept}</button>`
-            : `<button class="btn" data-act="present" ${n ? '' : 'disabled'}>${label}</button>
+            : `<button class="btn" data-act="present" ${(q.multi ? n >= q.needs.length : n) ? '' : 'disabled'}>${label}</button>
                <button class="btn btn--quiet" data-act="skip">Пропустить вопрос</button>`}
         </footer>`);
     },
@@ -675,7 +689,7 @@
       const next = CHS[S.ch + 1];
       return scene('end', `
         <div class="stage stage--center">
-          <article class="paper paper--typed paper--memo">${fileTag()}${S.hours <= 0 ? `<p class="mark"><span class="stamp">${(c.clock.label || 'Время').replace(/^часов /i, '')}: ноль</span></p><p>${c.clock.zero || 'Запас времени кончился. Следующую главу вы начинаете без права на ошибку.'}</p>` : ''}${c.end.html(S.found.size, total(c), S.hours, S)}${c.end.real ? `<p class="real"><span class="stamp">Это было на самом деле</span> ${c.end.real}</p>` : ''}</article>
+          <article class="paper paper--typed paper--memo">${fileTag()}${S.hours <= 0 ? `<p class="mark"><span class="stamp">${(c.clock.label || 'Время').replace(/^часов /i, '')}: ноль</span></p><p>${c.clock.zero || (!next ? 'Запас времени кончился.' : next.startHours != null ? 'Запас времени кончился. Следующая глава начинается с новым сроком, но этот ноль останется в разборе.' : 'Запас времени кончился: в следующей главе первый же промах оборвёт допрос.')}</p>` : ''}${c.end.html(S.found.size, total(c), S.hours, S)}${c.end.real ? `<p class="real"><span class="stamp">Это было на самом деле</span> ${c.end.real}</p>` : ''}</article>
           ${notice()}
           ${passportHtml()}
           ${debriefHtml()}
@@ -689,10 +703,23 @@
     },
   };
 
-  const go = (step) => { S.step = step; S.picks = []; S.notice = S.noticeNext || ''; S.noticeNext = ''; fireInbox(`step:${step}`); render(); window.scrollTo(0, 0); };
+  const go = (step) => { S.step = step; S.picks = []; S.say = ''; S.notice = S.noticeNext || ''; S.noticeNext = ''; fireInbox(`step:${step}`); render(); window.scrollTo(0, 0); };
   const forward = () => { const st = C().steps; go(st[st.indexOf(S.step) + 1]); };
 
+  let rendering = false;
   function render() {
+    try { renderNow(); }
+    catch (e) {
+      console.error('render failed:', e);
+      if (rendering) throw e; // падает и чистое состояние: это ошибка кода, не сохранения
+      rendering = true;
+      S = blank(S.ch, CHS[S.ch].startHours ?? S.hours);
+      S.notice = 'Сохранение устарело после обновления дела. Глава начата заново.';
+      renderNow();
+      rendering = false;
+    }
+  }
+  function renderNow() {
     if (timerOn() && !S.deadline) S.deadline = Date.now() + C().timed * 1000;
     app.innerHTML = named(views[S.step]() + dossierHtml() + recapHtml() + toastHtml());
     document.body.classList.toggle('has-dossier', S.dos.on || S.recap);
@@ -884,7 +911,7 @@
       const id = S.picks[0];
       reply(c.suspect, q.say, 'sh');
       reply('Следователь', `Предъявляю: ${S.picks.map((x) => c.documents[x].title).join(', ')}.`, 'cop');
-      const ok = q.multi ? sameSet(S.picks, q.needs) : q.needs.includes(id);
+      const ok = q.multi ? [q.needs, ...(q.alts || [])].some((set) => sameSet(S.picks, set)) : q.needs.includes(id);
       const trap = !ok && !q.multi && q.traps?.[id];
       const part = !ok && !q.multi && q.partial?.[id] && !S.partial.includes(`${S.round}:${id}`);
       if (part) {
@@ -938,7 +965,7 @@
   app.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');
     if (!el || el.disabled) return;
-    if (Date.now() - lastCommit < 350) return;
+    if (COMMIT.has(el.dataset.act) && Date.now() - lastCommit < 350) return;
     const sel = `[data-act="${el.dataset.act}"]${el.dataset.id ? `[data-id="${el.dataset.id}"]` : ''}${el.dataset.i ? `[data-i="${el.dataset.i}"]` : ''}`;
     const was = `${S.ch}:${S.step}`;
     acts[el.dataset.act](el);
