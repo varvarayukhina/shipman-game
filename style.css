@@ -425,6 +425,29 @@ a.btn { display: inline-block; text-decoration: none; }
 .passport__key { margin: 0 0 12px; font-size: 16px; }
 .req__note { padding: 8px 14px; background: var(--p-form); border: 2px solid var(--ink); color: var(--ink); }
 
+/* команда: вопросы «по порядку» и «кто это», код между вопросами */
+.tray__chips--names { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.chip--flat { cursor: default; }
+.sheets li .chip--flat, .chip--flat:hover { transform: none; box-shadow: 2px 4px 10px rgb(0 0 0 / 0.5); }
+.unlock { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.unlock__l { font-weight: 700; }
+.unlock__in { width: 4.5em; min-height: 48px; padding: 6px 10px; border: 2px solid var(--bar-line); border-radius: 3px; background: var(--bar-ink); color: var(--ink); font: 700 22px/1 'Anonymous Pro', 'Courier New', monospace; text-align: center; letter-spacing: 0.1em; }
+.unlock__help { margin: 0; width: 100%; font-size: 16px; }
+.paper--transcript .code { padding: 10px 12px; border: 2px solid var(--ink); background: #f7e7a6; font-weight: 700; }
+.paper--transcript .code .num { color: var(--stamp); font-size: 22px; }
+
+/* хронология: слот «не было» для события-приманки */
+.slot--bin { border-style: dashed; background: #f3efe2; }
+.slot--bin .slot__t { font-size: 16px; }
+
+/* финал дела: раскрытие внутри финала, разбор после опроса «правда или придумано» */
+.reveal { width: min(100%, 720px); }
+.quiz { width: min(100%, 720px); }
+.quiz__list { margin: 0 0 12px; padding-left: 1.4em; display: grid; gap: 12px; }
+.quiz__item p { margin: 0 0 8px; }
+.quiz__btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.quiz__res { margin: 0; }
+
 /* телефон боком: панели не должны съедать треть экрана */
 @media (max-height: 500px) {
   .bar { padding: 6px max(16px, env(safe-area-inset-left)); gap: 2px 20px; }

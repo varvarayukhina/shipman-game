@@ -71,6 +71,7 @@
     seen: new Set(), found: new Set(), round: 0, open: null, picks: [], log: [],
     placed: {}, ver: {}, tlFails: 0, guess: { pick: null, done: false }, inbox: { got: [], toast: null }, recap: false, seenAt: 0, dos: { on: false, tab: 'fav', doc: null }, fav: new Set(), room: null, drawer: null, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
     opener: { pick: null, done: false, ok: false }, choice: { pick: null, done: false, ok: false }, cross: { asked: [] }, lab: { phase: 'tests', run: [], pick: [], done: false, ok: false }, misses: 0, partial: [], deadline: null, closed: false, notice: '', noticeNext: '',
+    sol: { ans: {} }, revealOpen: false,
   });
   // Прогресс лежит в localStorage этого браузера: у каждого игрока свой, между устройствами не переносится.
   const KEY = saveKey(GAME);
@@ -106,6 +107,8 @@
       if (o.guess && c.guess && o.guess.pick !== null && !c.guess.options[o.guess.pick]) o.guess = { pick: null, done: false };
       if (o.opener && c.opener && o.opener.pick !== null && !c.opener.options[o.opener.pick]) o.opener = { pick: null, done: false, ok: false };
       if (o.inbox) o.inbox.got = (o.inbox.got || []).filter((id) => (c.inbox || []).some((m) => m.id === id));
+      if (!o.sol || typeof o.sol !== 'object' || !o.sol.ans || typeof o.sol.ans !== 'object') o.sol = { ans: {} };
+      o.revealOpen = !!o.revealOpen;
       // вернулись после перерыва: покажем «Вы остановились здесь»
       o.recap = !!o.seenAt && Date.now() - o.seenAt > 30 * 60 * 1000 && !['cover', 'intro'].includes(o.step);
       return { ...blank(o.ch, o.hours), ...o };
@@ -544,7 +547,7 @@
           <article class="paper paper--form" aria-label="${T.title}">
             <h2>${T.title}</h2>
             <p>${T.hint}</p>
-            <p>Когда все слоты заполнены, нажми «Проверить порядок»: верные карточки закрепятся, неверные вернутся в лоток. Первая проверка с ошибкой бесплатная, дальше каждая стоит ${T.missCost}&nbsp;${unitEnd()}</p>
+            <p>Когда все слоты заполнены, нажми «Проверить порядок»: верные карточки закрепятся, неверные вернутся в лоток. Первая проверка с ошибкой бесплатная, дальше каждая стоит ${T.missCost}&nbsp;${unitEnd()}${T.slots.some((s) => s.bin) ? ' Одно событие бумагами не подтверждается: его место в слоте «Этого не было».' : ''}</p>
             <p class="tl__msg" role="status">${S.tlMsg || `Закреплено ${nVer} из ${nAll}.`}</p>
             ${S.picks[0] ? `<p class="tl__pick" role="status">Выбрано: <b>${T.events.find((e) => e.id === S.picks[0]).text}</b>${S.tlFails ? ` Время ищи в: ${T.events.find((e) => e.id === S.picks[0]).src}.` : ''}</p>` : ''}
             <ol class="slots">
@@ -556,7 +559,7 @@
                   : ev
                     ? `<span class="slot__body"><b>${ev.text}</b>${ok ? `<span class="slot__src">Верно. Источник: ${ev.src}</span>` : `<button class="slot__btn slot__btn--undo" data-act="unplace" data-i="${i}">Убрать карточку</button>`}</span>`
                     : `<button class="slot__btn" data-act="slot" data-i="${i}" ${S.picks[0] ? '' : 'disabled'}>${S.picks[0] ? 'Поставить сюда' : 'Выбери событие'}</button>`;
-                return `<li class="slot${ev ? ' slot--set' : ''}${ok ? ' slot--ok' : ''}${s.locked ? ' slot--gap' : ''}"><span class="slot__t">${s.t}</span>${inner}</li>`;
+                return `<li class="slot${ev ? ' slot--set' : ''}${ok ? ' slot--ok' : ''}${s.locked ? ' slot--gap' : ''}${s.bin ? ' slot--bin' : ''}"><span class="slot__t">${s.t}</span>${inner}</li>`;
               }).join('')}
             </ol>
           </article>
@@ -676,13 +679,29 @@
         <button class="btn" data-act="forward">${C().turn.button}</button>
       </div>`),
 
-    solution: () => scene('solution', `
+    // Разбор открывается после короткого опроса «правда или придумано»: пять утверждений из дела, игрок отвечает сам, потом читает.
+    solution: () => {
+      const c = C(); const Q = c.solution.quiz; const a = S.sol.ans;
+      const answered = Q ? Q.filter((q, i) => a[i] !== undefined).length : 0;
+      const doneQ = !Q || answered === Q.length;
+      const right = Q ? Q.filter((q, i) => a[i] !== undefined && a[i] !== null && !!a[i] === q.real).length : 0;
+      return scene('solution', `
       <div class="stage stage--center">
-        <article class="paper paper--typed paper--memo">${C().solution.html}</article>
-        ${C().solution.next ? `<a class="btn" href="${C().solution.next.href}">${C().solution.next.label}</a>` : ''}
+        ${Q ? `<article class="paper paper--form quiz" aria-label="Правда или придумано">
+          <h2>Правда или придумано?</h2>
+          <p class="sr-only" role="status">${S.say || ''}</p>
+          <p>${doneQ ? `Угадано ${right} из ${Q.length}.` : 'Пять утверждений из этого дела. Что из них было на самом деле? Разбор откроется после ответов.'}</p>
+          <ol class="quiz__list">${Q.map((q, i) => `<li class="quiz__item"><p>${q.t}</p>${a[i] === undefined
+            ? `<div class="quiz__btns"><button class="slot__btn" data-act="squiz" data-i="${i}" data-v="1">Так и было</button><button class="slot__btn" data-act="squiz" data-i="${i}" data-v="0">Придумано</button></div>`
+            : `<p class="quiz__res"><span class="debrief__mark ${a[i] === null ? 'debrief__mark--skip' : !!a[i] === q.real ? 'debrief__mark--ok' : 'debrief__mark--miss'}">${a[i] === null ? 'Пропущено' : !!a[i] === q.real ? 'Верно' : 'Нет'}</span> ${q.real ? 'Так и было.' : 'Придумано для игры.'}${q.note ? ` ${q.note}` : ''}</p>`}</li>`).join('')}</ol>
+          ${doneQ ? '' : '<button class="btn btn--quiet" data-act="squizskip">Пропустить и читать разбор</button>'}
+        </article>` : ''}
+        ${doneQ ? `<article class="paper paper--typed paper--memo">${c.solution.html}</article>
+        ${c.solution.next ? `<a class="btn" href="${c.solution.next.href}">${c.solution.next.label}</a>` : ''}
         <a class="btn btn--quiet" href="./">Все дела</a>
-        <button class="btn btn--quiet" data-act="restart">Сыграть сначала</button>
-      </div>`),
+        <button class="btn btn--quiet" data-act="restart">Сыграть сначала</button>` : ''}
+      </div>`);
+    },
 
     end: () => {
       const c = C();
@@ -693,9 +712,10 @@
           ${notice()}
           ${passportHtml()}
           ${debriefHtml()}
+          ${!next && c.reveal && S.revealOpen ? `<article class="paper paper--form paper--memo reveal" id="reveal" tabindex="-1"><p class="mark"><span class="stamp">Чьё это было дело</span></p>${c.reveal.html.replace(/<h1>[\s\S]*?<\/h1>/, '')}</article>` : ''}
           ${next && gated() ? `<article class="paper paper--form paywall"><h2>${c.gate.title}</h2>${c.gate.html}</article>` : ''}
           ${next && !gated() ? `<button class="btn" data-act="nextch">Дальше: ${next.name}, «${next.title}»</button>` : ''}
-          ${!next && c.solution ? `<button class="btn" data-act="forward">${c.endNext}</button>` : ''}
+          ${!next && c.solution ? (c.reveal && !S.revealOpen ? `<button class="btn" data-act="revealin">${c.endNext}</button>` : '<button class="btn" data-act="tosol">Разбор дела</button>') : ''}
           <a class="btn btn--quiet" href="./">Сохранить и выйти</a>
           <p class="stage__note">Прогресс сохраняется на этом устройстве сам.</p>
           <button class="btn btn--quiet" data-act="restart">Сыграть сначала</button>
@@ -827,6 +847,16 @@
       render();
     },
     labbasis: () => { S.lab.phase = 'basis'; S.lab.pick = []; render(); },
+    revealin: () => { S.revealOpen = true; render(); const r = document.getElementById('reveal'); if (r) { r.scrollIntoView({ block: 'start' }); r.focus({ preventScroll: true }); } },
+    tosol: () => go('solution'),
+    squiz: (el) => {
+      const i = +el.dataset.i; const Q = C().solution.quiz || [];
+      if (!Q[i] || S.sol.ans[i] !== undefined) return;
+      S.sol.ans[i] = el.dataset.v === '1' ? 1 : 0;
+      S.say = (S.sol.ans[i] === 1) === Q[i].real ? 'Верно.' : 'Нет.';
+      render();
+    },
+    squizskip: () => { (C().solution.quiz || []).forEach((q, i) => { if (S.sol.ans[i] === undefined) S.sol.ans[i] = null; }); render(); },
     gpick: (el) => { if (!S.guess.done) { S.guess.pick = +el.dataset.i; render(); } },
     ganswer: () => { if (S.guess.pick === null || S.guess.done) return; S.guess.done = true; S.say = 'Версия записана.'; render(); },
     labback: () => { S.lab.phase = 'tests'; S.lab.pick = []; render(); },
@@ -878,7 +908,8 @@
       T.slots.forEach((sl, i) => {
         if (sl.locked || S.ver[i] || !S.placed[i]) return;
         const ev = T.events.find((e) => e.id === S.placed[i]);
-        if (ev && ev.slot === i) S.ver[i] = 1; else { delete S.placed[i]; wrong += 1; }
+        // слот «не было»: сюда ложится событие-приманка, которого в бумагах нет
+        if (ev && (sl.bin ? ev.slot === 'bin' : ev.slot === i)) S.ver[i] = 1; else { delete S.placed[i]; wrong += 1; }
       });
       const nAll = T.slots.filter((sl) => !sl.locked).length;
       const nVer = T.slots.filter((sl, i) => !sl.locked && S.ver[i]).length;
@@ -960,7 +991,7 @@
   };
 
   // Двойной щелчок по «Решить» или «Дальше»: вторая половина попадала бы на новую кнопку и пропускала результат ответа.
-  const COMMIT = new Set(['ganswer', 'check', 'forward', 'nextch', 'oanswer', 'ckanswer', 'labsubmit', 'submit', 'present', 'skip', 'accept', 'qask']);
+  const COMMIT = new Set(['ganswer', 'check', 'forward', 'nextch', 'oanswer', 'ckanswer', 'labsubmit', 'submit', 'present', 'skip', 'accept', 'qask', 'revealin', 'tosol', 'squizskip']);
   let lastCommit = 0;
   app.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');

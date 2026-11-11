@@ -10,9 +10,14 @@
   const BG = ['img/lift-shaft.jpg', 'img/vault-wall.jpg', 'img/night-street.jpg', 'img/street-1998.jpg', 'img/interview-room.jpg', 'img/cemetery-tent.jpg'];
   const bgOf = (i) => BG[i] || 'img/case-desk.jpg';
   const role = (id) => T.roles.find((r) => r.id === id);
-  const blank = () => ({ view: 'lobby', role: null, round: 0, max: 0, tries: {}, res: {}, hist: {}, pick: [null, null, null], open: 0, fav: [], drawer: null, ask: null, in: null, note: '', spoil: false });
+  const blank = () => ({ view: 'lobby', role: null, round: 0, max: 0, tries: {}, res: {}, hist: {}, pick: [null, null, null], open: 0, fav: [], drawer: null, ask: null, in: null, note: '', spoil: false, ucode: '' });
 
   const sheetsOf = (rid, roleId) => (T.rounds[rid] && T.rounds[rid].sheets[roleId]) || [];
+  // Вопросы трёх видов: pick (выбрать ответ из трёх в каждой части), order (расставить события по порядку), who (назвать человека из списка).
+  const kindOf = (r) => r.kind || 'pick';
+  const freshPick = (r) => (kindOf(r) === 'order' ? [] : r.parts.map(() => null));
+  // Код между вопросами: ведущий видит его после ответа и называет вслух, у остальных без него следующий вопрос не открывается. Сервера нет, поэтому код считается из номера вопроса.
+  const code = (i) => String((((i + 1) * 37) % 90) + 10);
 
   const load = () => {
     try {
@@ -22,8 +27,12 @@
       s.round = Math.min(Math.max(0, s.round | 0), N - 1);
       s.max = Math.min(Math.max(s.round, s.max | 0), N - 1);
       s.fav = Array.isArray(s.fav) ? s.fav.filter((k) => typeof k === 'string') : [];
-      const parts = T.rounds[s.round].parts;
-      if (!Array.isArray(s.pick) || s.pick.length !== parts.length || s.pick.some((v, i) => v !== null && !parts[i].options[v])) s.pick = parts.map(() => null);
+      const r = T.rounds[s.round]; const k = kindOf(r);
+      const okPick = Array.isArray(s.pick) && (k === 'order'
+        ? s.pick.every((v) => Number.isInteger(v) && r.events[v]) && new Set(s.pick).size === s.pick.length
+        : s.pick.length === r.parts.length && s.pick.every((v, i) => v === null || (k === 'who' ? r.names[v] !== undefined : !!r.parts[i].options[v])));
+      if (!okPick) s.pick = freshPick(r);
+      s.ucode = '';
       if (!s.role) s.view = 'lobby';
       if (s.view === 'cab' && !s.role) s.view = 'lobby';
       return s;
@@ -33,10 +42,12 @@
   let S = load() || blank();
 
   const R = () => T.rounds[S.round];
-  const emptyPick = () => R().parts.map(() => null);
+  const emptyPick = () => freshPick(R());
   const isLead = () => !!role(S.role).lead;
   const score = () => Object.values(S.res).reduce((a, k) => a + (POINTS[k] || 0), 0);
-  const names = (ids) => ids.map((i) => role(i).name).join(', ');
+  const names = (ids) => [].concat(ids).map((i) => role(i).name).join(', ');
+  const rightOrder = (seq) => seq.filter((v, k) => R().events[v].at === k).length;
+  const rightWho = (seq) => seq.filter((v, k) => R().names[v] === R().parts[k].who).length;
   const plain = (html) => { const d = document.createElement('div'); d.innerHTML = html; return d.textContent.replace(/\s+/g, ' ').trim(); };
   const pageUrl = () => location.href.split(/[?#]/)[0];
 
@@ -112,16 +123,55 @@
       ${isLead() ? `<span class="bar__item"><b>Очки</b> <span class="num">${score()}</span> из ${N * 2}</span>` : ''}
     </header>`;
 
+  const codeLine = () => (S.round < N - 1 ? `<p class="code">Код для команды: <b class="num">${code(S.round)}</b>. Назовите его вслух: без него у остальных следующий вопрос не откроется.</p>` : '');
   const resultHtml = () => {
-    const r = R(); const k = S.res[S.round]; const hist = S.hist[S.round] || [];
-    // пояснения к неверным выбранным частям показываем, когда вопрос закрыт
-    const bad = [...new Set(hist.flatMap((h) => h.map((v, i) => (r.parts[i].options[v].ok ? '' : r.parts[i].options[v].fb))).filter(Boolean))].map((f) => `<p class="loss">${f}</p>`).join('');
-    const good = r.parts.map((p) => `${p.ask} ${p.options.find((o) => o.ok).t}.`).join(' ');
-    if (k === 'ok1' || k === 'ok2') return `${bad}<p class="mark"><span class="stamp">Верно</span></p><p>${r.why}</p>`;
-    if (k === 'shown') return `${bad}<p class="mark"><span class="stamp">Попытки кончились</span></p><p>Верный ответ. ${good}</p><p>${r.why}</p>`;
-    if (hist.length) return '<p class="loss">Не сходится. Осталась одна попытка.</p>';
+    const r = R(); const k = S.res[S.round]; const hist = S.hist[S.round] || []; const kind = kindOf(r);
+    let bad = ''; let good = '';
+    if (kind === 'pick') {
+      // пояснения к неверным выбранным частям показываем, когда вопрос закрыт
+      bad = [...new Set(hist.flatMap((h) => h.map((v, i) => (r.parts[i].options[v].ok ? '' : r.parts[i].options[v].fb))).filter(Boolean))].map((f) => `<p class="loss">${f}</p>`).join('');
+      good = r.parts.map((p) => `${p.ask} ${p.options.find((o) => o.ok).t}.`).join(' ');
+    } else if (kind === 'order') {
+      good = `Верный порядок: ${[...r.events].sort((a, b) => a.at - b.at).map((e, i) => `${i + 1}. ${e.t}`).join(' ')}`;
+    } else {
+      good = r.parts.map((p, i) => `${i + 1}. ${p.who}.`).join(' ');
+    }
+    if (k === 'ok1' || k === 'ok2') return `${bad}<p class="mark"><span class="stamp">Верно</span></p><p>${r.why}</p>${codeLine()}`;
+    if (k === 'shown') return `${bad}<p class="mark"><span class="stamp">Попытки кончились</span></p><p>Верный ответ. ${good}</p><p>${r.why}</p>${codeLine()}`;
+    if (hist.length) {
+      const last = hist[hist.length - 1];
+      const n = kind === 'order' ? ` На своём месте: ${rightOrder(last)} из ${r.events.length}.` : kind === 'who' ? ` Верных имён: ${rightWho(last)} из ${r.parts.length}.` : '';
+      return `<p class="loss">Не сходится.${n} Осталась одна попытка.</p>`;
+    }
     return '';
   };
+
+  // Лоток ответа: у ведущего кнопки, у остальных то же содержание без кнопок, чтобы подсказывать по своим листам.
+  const roleTag = (r, cls = 'chip__s') => `<span class="${cls}">Лист: ${names(r)}</span>`;
+  const trayHtml = (r, lead, done) => {
+    const kind = kindOf(r);
+    if (kind === 'order') {
+      const n = r.events.length;
+      return `<p class="tray__t">${lead ? `Нажимайте события в порядке времени. Выбрано ${S.pick.length} из ${n}.` : 'События без порядка. Ведущий расставляет их, вы подсказываете по своим листам.'}</p>
+        <div class="tray__chips">${r.events.map((e, i) => { const k = S.pick.indexOf(i); return lead
+          ? `<button class="chip" data-act="opick" data-i="${i}" aria-pressed="${k >= 0}" ${done ? 'disabled' : ''}><span class="chip__t">${k >= 0 ? `${k + 1}. ` : ''}${e.t}</span>${roleTag(e.role)}</button>`
+          : `<div class="chip chip--flat"><span class="chip__t">${e.t}</span>${roleTag(e.role)}</div>`; }).join('')}</div>
+        ${lead && S.pick.length && !done ? '<button class="btn btn--quiet" data-act="oclear">Сбросить порядок</button>' : ''}`;
+    }
+    if (kind === 'who') {
+      return r.parts.map((p, k) => `<p class="tray__t">${k + 1}. ${p.ask} ${roleTag(p.role, 'ask__need')}</p>
+        ${lead
+          ? `<div class="tray__chips tray__chips--names">${r.names.map((nm, i) => `<button class="chip" data-act="pick" data-k="${k}" data-i="${i}" aria-pressed="${S.pick[k] === i}" ${done ? 'disabled' : ''}><span class="chip__t">${nm}</span></button>`).join('')}</div>`
+          : (k === 0 ? `<p class="tray__p">Имена на выбор: ${r.names.join(', ')}. Выбирает ведущий.</p>` : '')}`).join('');
+    }
+    return lead
+      ? r.parts.map((p, k) => `<p class="tray__t">${k + 1}. ${p.ask}</p>
+         <div class="tray__chips">${p.options.map((o, i) => `<button class="chip" data-act="pick" data-k="${k}" data-i="${i}" aria-pressed="${S.pick[k] === i}" ${done ? 'disabled' : ''}><span class="chip__t">${o.t}</span></button>`).join('')}</div>`).join('')
+      : `<p class="tray__t">Три части ответа. Выбирает ведущий. К следующему вопросу переходите по коду, который он назовёт.</p>
+         ${r.parts.map((p, k) => `<p class="tray__p"><b>${k + 1}. ${p.ask}</b></p><ul>${p.options.map((o) => `<li>${o.t}</li>`).join('')}</ul>`).join('')}`;
+  };
+  const readyToAnswer = () => (kindOf(R()) === 'order' ? S.pick.length === R().events.length : !S.pick.some((v) => v === null));
+  const pickedCount = () => (kindOf(R()) === 'order' ? `${S.pick.length} из ${R().events.length}` : `${S.pick.filter((v) => v !== null).length} из ${R().parts.length}`);
 
   // Папка: вкладки-бумаги, лист с канцелярской скрепкой, звёздочка и отправка в чат.
   const folder = (items, open, withRound = false) => {
@@ -199,11 +249,7 @@
             <div role="status" aria-live="polite">${lead ? resultHtml() : ''}</div>
           </article>
           <div class="tray">
-            ${lead
-              ? r.parts.map((p, k) => `<p class="tray__t">${k + 1}. ${p.ask}</p>
-                 <div class="tray__chips">${p.options.map((o, i) => `<button class="chip" data-act="pick" data-k="${k}" data-i="${i}" aria-pressed="${S.pick[k] === i}" ${done ? 'disabled' : ''}><span class="chip__t">${o.t}</span></button>`).join('')}</div>`).join('')
-              : `<p class="tray__t">Три части ответа. Выбирает ведущий. К следующему вопросу переходите, когда он объявит ответ.</p>
-                 ${r.parts.map((p, k) => `<p class="tray__p"><b>${k + 1}. ${p.ask}</b></p><ul>${p.options.map((o) => `<li>${o.t}</li>`).join('')}</ul>`).join('')}`}
+            ${trayHtml(r, lead, done)}
           </div>
         </div>
         <div class="files">
@@ -220,8 +266,11 @@
           ${lead
             ? (done
               ? `<button class="btn" data-act="next">${S.round === N - 1 ? 'К итогу' : 'Следующий вопрос'}</button>`
-              : `<button class="btn" data-act="answer" ${S.pick.some((v) => v === null) ? 'disabled' : ''}>Ответить${S.pick.some((v) => v === null) ? `: выбрано ${S.pick.filter((v) => v !== null).length} из ${r.parts.length}` : ''}</button>`)
-            : `<button class="btn" data-act="next">${S.round === N - 1 ? 'К итогу' : 'Следующий вопрос'}</button>`}
+              : `<button class="btn" data-act="answer" ${readyToAnswer() ? '' : 'disabled'}>Ответить${readyToAnswer() ? '' : `: выбрано ${pickedCount()}`}</button>`)
+            : (S.round === N - 1
+              ? '<button class="btn" data-act="next">К итогу</button>'
+              : `<div class="unlock"><label class="unlock__l" for="unlock-code">Код от ведущего</label><input class="unlock__in" id="unlock-code" inputmode="numeric" autocomplete="off" maxlength="2" aria-describedby="unlock-help"><button class="btn" data-act="unlock">Следующий вопрос</button></div>
+                 <p class="unlock__help" id="unlock-help" role="status">${S.ucode === 'bad' ? 'Код не подошёл. Спросите ведущего ещё раз.' : 'Код появляется у ведущего после ответа.'}</p>`)}
           ${S.round > 0 ? '<button class="btn btn--quiet" data-act="back">Назад</button>' : ''}
         </footer>`);
     },
@@ -292,7 +341,7 @@
     save();
   }
 
-  const reset = () => { S.pick = emptyPick(); S.open = 0; S.note = ''; S.ask = null; S.drawer = null; };
+  const reset = () => { S.pick = emptyPick(); S.open = 0; S.note = ''; S.ask = null; S.drawer = null; S.ucode = ''; };
   const go = (view) => { S.view = view; reset(); render(); window.scrollTo(0, 0); };
 
   // Отправка текста в чат: меню «Поделиться» телефона, а если его нет, копирование. Итог показываем игроку, ничего не глотаем.
@@ -337,12 +386,20 @@
     drawer: (el) => { S.drawer = el.dataset.i === 'fav' ? 'fav' : +el.dataset.i; S.open = 0; S.note = ''; render(); window.scrollTo(0, 0); },
     toround: () => { S.view = 'round'; S.open = 0; S.note = ''; S.drawer = null; render(); window.scrollTo(0, 0); },
     pick: (el) => { if (!S.res[S.round]) { S.pick[+el.dataset.k] = +el.dataset.i; render(); } },
+    opick: (el) => { if (S.res[S.round]) return; const i = +el.dataset.i; S.pick = S.pick.includes(i) ? S.pick.filter((x) => x !== i) : [...S.pick, i]; render(); },
+    oclear: () => { if (!S.res[S.round]) { S.pick = []; render(); } },
+    unlock: () => {
+      const inp = document.getElementById('unlock-code'); const v = ((inp && inp.value) || '').trim();
+      if (v !== code(S.round)) { S.ucode = 'bad'; render(); const again = document.getElementById('unlock-code'); if (again) { again.value = v; again.focus(); } return; }
+      S.ucode = ''; acts.next();
+    },
     answer: () => {
-      if (S.pick.some((v) => v === null) || S.res[S.round]) return;
-      const r = R();
+      if (!readyToAnswer() || S.res[S.round]) return;
+      const r = R(); const kind = kindOf(r);
       (S.hist[S.round] = S.hist[S.round] || []).push([...S.pick]);
       S.tries[S.round] = (S.tries[S.round] || 0) + 1;
-      if (S.pick.every((v, i) => r.parts[i].options[v].ok)) S.res[S.round] = S.tries[S.round] === 1 ? 'ok1' : 'ok2';
+      const ok = kind === 'order' ? rightOrder(S.pick) === r.events.length : kind === 'who' ? rightWho(S.pick) === r.parts.length : S.pick.every((v, i) => r.parts[i].options[v].ok);
+      if (ok) S.res[S.round] = S.tries[S.round] === 1 ? 'ok1' : 'ok2';
       else if (S.tries[S.round] >= 2) S.res[S.round] = 'shown';
       S.pick = emptyPick();
       render();
@@ -379,8 +436,9 @@
   };
 
   // Двойной щелчок по «Ответить» или «Следующий вопрос» не должен пропускать результат.
-  const COMMIT = new Set(['answer', 'next', 'back']);
+  const COMMIT = new Set(['answer', 'next', 'back', 'unlock']);
   let lastCommit = 0;
+  app.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target && e.target.id === 'unlock-code') { e.preventDefault(); const b = document.querySelector('[data-act="unlock"]'); if (b) b.click(); } });
   app.addEventListener('click', async (e) => {
     const el = e.target.closest('[data-act]');
     if (!el || el.disabled) return;
