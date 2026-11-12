@@ -5,7 +5,7 @@
     1: [window.CH1, window.CH2, window.CH3, window.CH4],
     2: [window.V1, window.V2, window.V3, window.V4],
     3: [window.W1, window.W2, window.W3, window.W4].filter(Boolean),
-    4: [window.Z1, window.Z2, window.Z3].filter(Boolean),
+    4: [window.Z1, window.ZC, window.Z2, window.Z3].filter(Boolean),
     5: [window.T1].filter(Boolean),
   };
   const app = document.getElementById('app');
@@ -51,12 +51,19 @@
   if (!GAMES[ASKED]) { catalog(); return; }
   const GAME = ASKED;
   const CHS = GAMES[GAME];
-  // «Ваша версия»: у глав с описанием guess этот шаг идёт перед поворотом
+  // «Ваша версия»: у глав с описанием guess этот шаг идёт перед поворотом. «Ставка» (bet) идёт перед финалом главы, конверт вскрывается в разборе.
   CHS.forEach((c) => {
-    if (!c.guess || c.steps.includes('guess')) return;
-    const i = c.steps.indexOf('turn');
-    if (i > -1) { c.steps.splice(i, 0, 'guess'); c.img = { ...c.img, guess: c.img.guess || c.img.interview || c.img.turn || c.img.desk }; }
+    if (c.guess && !c.steps.includes('guess')) {
+      const i = c.steps.indexOf('turn');
+      if (i > -1) { c.steps.splice(i, 0, 'guess'); c.img = { ...c.img, guess: c.img.guess || c.img.interview || c.img.turn || c.img.desk }; }
+    }
+    if (c.bet && !c.steps.includes('bet')) {
+      const i = c.steps.indexOf('end');
+      if (i > -1) { c.steps.splice(i, 0, 'bet'); c.img = { ...c.img, bet: c.img.bet || c.img.turn || c.img.desk }; }
+    }
   });
+  // Визуальный мир дела (бумага, чернила, печать): meta.world первой главы, стили в style.css по body[data-world]
+  document.body.dataset.world = (CHS[0].meta && CHS[0].meta.world) || '';
   const START_HOURS = 24;
 
   // Имя врача скрыто до финала. В текстах глав стоят метки ⟦имя⟧ и ⟦полное⟧ (к метке можно дописывать падежное окончание).
@@ -67,11 +74,11 @@
   const named = (html) => html.replaceAll('⟦имя⟧', NAME).replaceAll('⟦полное⟧', FULL);
 
   const blank = (ch, hours) => ({
-    ch, step: CHS[ch].steps[0], hours,
+    ch, step: CHS[ch].steps[0], hours, start: hours,
     seen: new Set(), found: new Set(), round: 0, open: null, picks: [], log: [],
-    placed: {}, ver: {}, tlFails: 0, guess: { pick: null, done: false }, inbox: { got: [], toast: null }, recap: false, seenAt: 0, dos: { on: false, tab: 'fav', doc: null }, fav: new Set(), room: null, drawer: null, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
+    placed: {}, ver: {}, tlFails: 0, guess: { pick: null, done: false }, inbox: { got: [], toast: null, ans: {} }, recap: false, seenAt: 0, dos: { on: false, tab: 'fav', doc: null }, fav: new Set(), room: null, drawer: null, tlMsg: '', say: '', flags: new Set(), auditDone: false, audit: { ok: 0, wrong: 0, total: 0 },
     opener: { pick: null, done: false, ok: false }, choice: { pick: null, done: false, ok: false }, cross: { asked: [] }, lab: { phase: 'tests', run: [], pick: [], done: false, ok: false }, misses: 0, partial: [], deadline: null, closed: false, notice: '', noticeNext: '',
-    sol: { ans: {} }, revealOpen: false,
+    sol: { ans: {} }, revealOpen: false, map: { sel: null, marks: [], done: false }, bet: { pick: null, done: false }, fx: '',
   });
   // Прогресс лежит в localStorage этого браузера: у каждого игрока свой, между устройствами не переносится.
   const KEY = saveKey(GAME);
@@ -106,9 +113,14 @@
       if (o.choice && c.choice && o.choice.pick !== null && !c.choice.options[o.choice.pick]) o.choice = { pick: null, done: false, ok: false };
       if (o.guess && c.guess && o.guess.pick !== null && !c.guess.options[o.guess.pick]) o.guess = { pick: null, done: false };
       if (o.opener && c.opener && o.opener.pick !== null && !c.opener.options[o.opener.pick]) o.opener = { pick: null, done: false, ok: false };
-      if (o.inbox) o.inbox.got = (o.inbox.got || []).filter((id) => (c.inbox || []).some((m) => m.id === id));
+      if (o.inbox) { o.inbox.got = (o.inbox.got || []).filter((id) => (c.inbox || []).some((m) => m.id === id)); if (!o.inbox.ans || typeof o.inbox.ans !== 'object') o.inbox.ans = {}; }
       if (!o.sol || typeof o.sol !== 'object' || !o.sol.ans || typeof o.sol.ans !== 'object') o.sol = { ans: {} };
       o.revealOpen = !!o.revealOpen;
+      if (!Number.isFinite(o.start)) o.start = c.startHours ?? o.hours;
+      if (!o.map || typeof o.map !== 'object' || !Array.isArray(o.map.marks)) o.map = { sel: null, marks: [], done: false };
+      if (c.map) o.map.marks = o.map.marks.filter((i) => Number.isInteger(i) && c.map.pins[i]); else o.map = { sel: null, marks: [], done: false };
+      if (!o.bet || typeof o.bet !== 'object' || (o.bet.pick !== null && !(c.bet && c.bet.options[o.bet.pick]))) o.bet = { pick: null, done: false };
+      o.fx = '';
       // вернулись после перерыва: покажем «Вы остановились здесь»
       o.recap = !!o.seenAt && Date.now() - o.seenAt > 30 * 60 * 1000 && !['cover', 'intro'].includes(o.step);
       return { ...blank(o.ch, o.hours), ...o };
@@ -141,9 +153,8 @@
   const left = () => Math.max(0, Math.ceil(((S.deadline || 0) - Date.now()) / 1000));
   const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   const timerOn = () => S.step === 'desk' && !!C().timed && !noTimer() && !S.closed;
-  const notice = () => (S.notice ? `<p class="notice" role="status">${S.notice}</p>` : '');
+  const notice = () => `${S.notice ? `<p class="notice" role="status">${S.notice}</p>` : ''}${bossHtml()}`;
   const body = (d) => (typeof d.html === 'function' ? d.html(S) : d.html);
-  const paper = (d) => `<article class="paper paper--${d.kind}">${body(d)}</article>`;
   const fileTag = () => `<span class="file-tag">${C().name} · ${C().title}</span>`;
   const attach = (src, html) => (src && !/<(figure|img)\b/.test(html) ? `<figure class="photo photo--attach"><img src="${src}" width="1400" height="788" alt=""></figure>` : '');
   const scene = (step, inner) => `<section class="scene" style="--bg:url(${C().img[step] || C().img.desk})">${inner}</section>`;
@@ -175,6 +186,7 @@
     (c.interview || []).forEach((q, i) => { if (!q.locked && S.found.has(i)) out.push({ h: `Допрос, вопрос ${i + 1}`, t: q.note || q.hit }); });
     if (c.lab && S.lab.done && S.lab.ok) out.push({ h: c.lab.title, t: c.lab.okText });
     if (c.choice && S.choice.done && S.choice.ok) out.push({ h: c.choice.title, t: c.choice.options[S.choice.pick].out });
+    bossAnswered().forEach(([m, o]) => out.push({ h: m.from, t: `Вы: «${o.t}». ${o.out}` }));
     return out;
   };
   const dossierHtml = () => {
@@ -211,11 +223,30 @@
     </div>`;
   };
 
-  // Входящие: SMS, звонки и кадры камер приходят уведомлением и лежат в досье
+  // Входящие: SMS, звонки и кадры камер приходят уведомлением и лежат в досье.
+  // Входящее от начальника (kind: boss) лежит на столе до ответа: два ответа, у каждого цена в часах, сделка помечается в разборе.
   const inboxList = () => (C().inbox || []).filter((m) => S.inbox.got.includes(m.id));
-  const KIND = { sms: 'SMS', call: 'Звонок', cctv: 'Камера' };
+  const KIND = { sms: 'SMS', call: 'Звонок', cctv: 'Камера', boss: 'Сверху' };
+  const bossPending = () => (C().inbox || []).find((m) => m.kind === 'boss' && S.inbox.got.includes(m.id) && S.inbox.ans[m.id] === undefined);
+  const bossAnswered = () => (C().inbox || []).filter((m) => m.kind === 'boss' && S.inbox.ans[m.id] !== undefined).map((m) => [m, m.offer[S.inbox.ans[m.id]]]);
+  const bossHtml = () => {
+    const m = bossPending();
+    if (!m) return '';
+    return `<article class="paper paper--form boss" aria-label="Входящее сверху"><p class="msg__meta"><b>${m.from}</b>${m.when ? ` · ${m.when}` : ''}</p><p>${m.text}</p>
+      <div class="quiz__btns">${m.offer.map((o, i) => `<button class="slot__btn" data-act="boffer" data-id="${m.id}" data-i="${i}">${o.t}</button>`).join('')}</div></article>`;
+  };
+  // Вопрос без ответа при уходе с экрана: начальник считает это ответом по умолчанию (вариант с auto, иначе последний)
+  const bossAuto = () => (C().inbox || []).forEach((m) => {
+    if (m.kind !== 'boss' || !S.inbox.got.includes(m.id) || S.inbox.ans[m.id] !== undefined) return;
+    let k = m.offer.findIndex((o) => o.auto); if (k < 0) k = m.offer.length - 1;
+    S.inbox.ans[m.id] = k; S.hours = Math.max(0, S.hours + (m.offer[k].d || 0));
+  });
   const msgHtml = (m) => {
     const head = `<p class="msg__meta"><b>${KIND[m.kind] || 'Сообщение'}</b> · ${m.from}${m.when ? ` · ${m.when}` : ''}</p>`;
+    if (m.kind === 'boss') {
+      const o = m.offer[S.inbox.ans[m.id]];
+      return `<article class="msg">${head}<p class="msg__text">${m.text}</p>${o ? `<p><b>Вы:</b> «${o.t}»</p><p>${o.out}</p>` : '<p>Ответа пока нет.</p>'}</article>`;
+    }
     if (m.kind === 'cctv') {
       return `<article class="msg msg--cctv">${head}<figure class="cctv"><img src="${m.img}" width="1400" height="788" loading="lazy" alt="${m.alt || ''}"><span class="cctv__cam">${m.cam || 'КАМЕРА'}</span><span class="cctv__time"><i class="cctv__rec" aria-hidden="true"></i>${m.when || ''}</span></figure><p>${m.text}</p></article>`;
     }
@@ -230,10 +261,10 @@
   };
   const toastHtml = () => {
     const m = S.inbox.toast && (C().inbox || []).find((x) => x.id === S.inbox.toast);
-    if (!m || S.dos.on || S.recap) return '';
+    if (!m || m.kind === 'boss' || S.dos.on || S.recap) return '';
     return `<div class="toast" role="status"><button class="toast__main" data-act="toast" data-id="${m.id}"><b>Входящее: ${KIND[m.kind] || 'сообщение'}</b> ${m.from}</button><button class="toast__x" data-act="tclose" aria-label="Закрыть уведомление">×</button></div>`;
   };
-  const STEP_NOW = { desk: 'читаете бумаги', timeline: 'собираете хронологию', audit: 'проверяете таблицу', interview: 'допрос', guess: 'записываете версию', lab: 'работа в лаборатории', choice: 'выбираете ход', cross: 'допрос свидетеля', opener: 'первый вопрос', turn: 'поворот главы', end: 'финал главы' };
+  const STEP_NOW = { desk: 'читаете бумаги', timeline: 'собираете хронологию', audit: 'проверяете таблицу', interview: 'допрос', guess: 'записываете версию', lab: 'работа в лаборатории', choice: 'выбираете ход', cross: 'допрос свидетеля', opener: 'первый вопрос', turn: 'поворот главы', end: 'финал главы', map: 'осматриваете место', bet: 'делаете ставку' };
   const recapHtml = () => {
     if (!S.recap) return '';
     const c = C(); const k = knownList();
@@ -257,12 +288,14 @@
     if (c.audit) rows.push({ label: 'Таблица', text: `${S.audit.ok} из ${S.audit.total}` });
     if (c.timeline) rows.push({ label: 'Хронология', text: S.tlFails ? `проверок с ошибкой: ${S.tlFails}` : 'с первой проверки' });
     if (c.guess && S.guess.done) { const o = c.guess.options[S.guess.pick]; rows.push({ label: 'Версия', text: o.skip ? 'без версии' : o.ok ? 'подтвердилась' : 'не подтвердилась' }); }
+    if (c.map && S.map.done) rows.push({ label: c.map.label || 'Осмотр', text: `${S.map.marks.filter((i) => c.map.pins[i].hit).length} из ${c.map.pins.filter((p) => p.hit).length}` });
+    const b = bossAnswered(); if (b.length) rows.push({ label: 'Сверху', text: b.some(([m, o]) => o.bad) ? 'сделка' : 'отказ' });
     rows.push({ label: c.clock.label, text: `${S.hours} ${unit()}` });
     return rows;
   };
   const passportTitle = () => { const m = (GAMES[GAME][0] || {}).meta; return `Дело №${GAME}${m && m.title ? ` «${m.title}»` : ''}, ${C().name.toLowerCase()}`; };
   const passportText = () => `${passportTitle()}\n${passportRows().map((r) => `${r.label}: ${r.cells ? r.cells.map((x) => (x ? '■' : '□')).join(' ') : r.text}`).join('\n')}`;
-  const passportHtml = () => `<article class="paper paper--form passport" aria-label="Паспорт прохождения"><h2>Паспорт прохождения</h2><p class="passport__t">${passportTitle()}</p>
+  const passportHtml = () => `<article class="paper paper--letter passport card" aria-label="Паспорт прохождения"><p class="card__k">Паспорт</p><h2>Паспорт прохождения</h2><p class="passport__t">${passportTitle()}</p>
     <ul class="passport__rows">${passportRows().map((r) => `<li><span class="passport__l">${r.label}</span> ${r.cells ? `<span class="passport__sq" role="img" aria-label="${r.cells.filter(Boolean).length} из ${r.cells.length}">${r.cells.map((x) => `<i class="${x ? 'on' : 'off'}"></i>`).join('')}</span>` : `<b>${r.text}</b>`}</li>`).join('')}</ul>
     <div class="fld__acts"><button class="btn" data-act="share">Поделиться</button><button class="btn btn--quiet" data-act="shareimg">Сохранить картинку</button></div></article>`;
   const passportImage = async () => {
@@ -301,6 +334,10 @@
       it.push(`<li class="debrief__item"><span class="debrief__mark debrief__mark--${o.skip ? 'skip' : o.ok ? 'ok' : 'miss'}">${o.skip ? 'Без версии' : o.ok ? 'Подтвердилась' : 'Не подтвердилась'}</span> <b>Ваша версия: «${o.title}».</b> ${o.skip ? c.guess.skip : o.ok ? c.guess.hit : c.guess.miss}</li>`);
     }
     if (c.timeline) add(S.tlFails <= 1, c.timeline.title, S.tlFails ? `Порядок собран, проверок с ошибкой: ${S.tlFails}.` : 'Порядок собран с первой проверки.');
+    if (c.map && S.map.done) {
+      const hits = c.map.pins.filter((p) => p.hit).length; const ok = S.map.marks.filter((i) => c.map.pins[i].hit).length; const extra = S.map.marks.length - ok;
+      add(ok === hits && !extra, c.map.title, `Отмечено верно ${ok} из ${hits}${extra ? `, лишних отметок: ${extra}` : ''}.`);
+    }
     if (c.audit) {
       const rows = c.audit.rows;
       const missed = rows.filter((r, i) => r.hit && !S.flags.has(i)).map((r) => r.cells.join(', '));
@@ -319,9 +356,10 @@
       const asked = c.cross.questions.filter((q) => S.cross.asked.includes(q.id));
       add(asked.filter((q) => q.d >= 0).length >= asked.filter((q) => q.d < 0).length, c.cross.title, `Вопросов задано ${asked.length}: в вашу пользу ${asked.filter((q) => q.d >= 0).length}, против ${asked.filter((q) => q.d < 0).length}.`);
     }
+    bossAnswered().forEach(([m, o]) => it.push(`<li class="debrief__item"><span class="debrief__mark debrief__mark--${o.bad ? 'miss' : 'ok'}">${o.bad ? 'Сделка' : 'Отказ'}</span> <b>${m.from}.</b> Вы: «${o.t}». ${o.out}</li>`));
     if (!it.length) return '';
-    return `<article class="paper paper--form debrief"><h2>Разбор главы</h2><ul class="debrief__list">${it.join('')}</ul>
-      <p class="debrief__total">${c.clock.label}: ${S.hours} ${unitEnd()} Промахов на допросе: ${S.misses}.</p></article>`;
+    return `<article class="paper paper--form debrief card"><p class="card__k">Разбор</p><h2>Разбор главы</h2><ul class="debrief__list">${it.join('')}</ul>
+      <p class="debrief__total">${c.clock.label}: ${S.hours} ${unitEnd()}${c.interview ? ` Промахов на допросе: ${S.misses}.` : ''}</p></article>`;
   };
 
   const bar = () => {
@@ -345,12 +383,60 @@
     </button>`;
   };
 
-  const logHtml = () => S.log.map((l) => {
-    if (l.who === 'mark') return `<p class="mark"><span class="stamp">${l.text}</span></p>`;
+  const logHtml = () => S.log.map((l, i) => {
+    if (l.who === 'mark') return `<p class="mark${S.fx === 'hit' && i === S.log.length - 1 ? ' mark--new' : ''}"><span class="stamp">${l.text}</span></p>`;
     if (l.who === 'loss') return `<p class="loss">${l.text}</p>`;
     if (l.who === 'note') return `<p class="note">[${l.text}]</p>`;
     return `<p class="${l.who}"><b>${l.name}:</b> ${l.text}</p>`;
   }).join('');
+
+  // Допросная: кадр комнаты и состояние подозреваемого, оно меняется по числу найденных противоречий. Людей на фото нет.
+  const MOODS = ['спокоен', 'напряжён', 'сломан'];
+  const mood = () => { const n = total(C()); const p = n ? S.found.size / n : 0; return p === 0 ? 0 : p < 0.67 ? 1 : 2; };
+  const suspectHtml = () => {
+    const c = C(); const m = mood(); const words = c.moods || MOODS;
+    return `<figure class="suspect" data-state="${m}"><img src="${c.img.interview || c.img.desk}" width="1672" height="941" alt="">
+      <figcaption class="suspect__state"><span>${c.suspect}</span><span class="suspect__meter" role="img" aria-label="Состояние: ${words[m]}">${words.map((w, i) => `<i${i === m ? ' class="on"' : ''}>${w}</i>`).join('')}</span></figcaption></figure>`;
+  };
+  // Щелчок печати на попадание: короткий звук без файла, только после нажатия игрока
+  const stampSound = () => {
+    try {
+      const A = window.AudioContext || window.webkitAudioContext; if (!A) return;
+      const a = new A(); const o = a.createOscillator(); const g = a.createGain();
+      o.type = 'square'; o.frequency.value = 170;
+      g.gain.setValueAtTime(0.2, a.currentTime); g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.09);
+      o.connect(g).connect(a.destination); o.start(); o.stop(a.currentTime + 0.1);
+      o.onended = () => a.close();
+    } catch (e) { console.warn('sound failed:', e.message); }
+  };
+
+  // Один экран для «Ваша версия» и «Ставка»: выбор без цены, итог виден позже
+  const pickView = (step, key, acts2, defTitle, hint) => () => {
+    const G = C()[key]; const st = S[key];
+    const o = st.pick === null ? null : G.options[st.pick];
+    return scene(step, `
+      ${bar()}
+      ${notice()}
+      <div class="room">
+        <article class="paper paper--transcript" aria-label="${G.title || defTitle}">
+          <h2>${G.title || defTitle}</h2>
+          <p class="sr-only" role="status">${S.say || ''}</p>
+          <p>${G.prompt}</p>
+          ${st.done ? `<p class="mark"><span class="stamp">${G.stamp || 'Записано'}</span></p><p>${G.saved || 'Версия записана в блокнот. Посмотрим, подтвердится ли она.'}</p>` : ''}
+        </article>
+        <div class="tray">
+          <p class="tray__t">${st.done ? (G.doneTitle || 'Ваша версия') : hint}</p>
+          <div class="tray__chips">
+            ${G.options.map((x, i) => `<button class="chip" data-act="${acts2[0]}" data-i="${i}" aria-pressed="${st.pick === i}" ${st.done ? 'disabled' : ''}><span class="chip__t">${x.title}</span>${x.text ? `<span class="chip__s">${x.text}</span>` : ''}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+      <footer class="dock">
+        ${st.done
+          ? '<button class="btn" data-act="forward">Дальше</button>'
+          : `<button class="btn" data-act="${acts2[1]}" ${st.pick === null ? 'disabled' : ''}>${G.button || 'Записать версию'}${o ? `: ${o.title}` : ''}</button>`}
+      </footer>`);
+  };
 
   const views = {
     cover: () => scene('cover', `
@@ -519,6 +605,7 @@
       }
       return `<section class="scene" style="--bg:url(${room.img || c.img.desk})">
         ${bar()}
+        ${notice()}
         <div class="archive">
           <h2 class="sr-only">Картотека: ${room.name}${dr ? `, ящик ${mark(dr)}` : ''}</h2>
           ${R.length > 1 ? `<nav class="rooms" aria-label="Комнаты">${R.map((r) => `<button class="rooms__btn" data-act="room" data-id="${r.id}" aria-pressed="${r.id === room.id}">${r.id === room.id ? '' : '→ '}${r.name}</button>`).join('')}</nav>` : ''}
@@ -618,11 +705,14 @@
         ? `Предъявить${n ? ` (${n})` : ''}`
         : `Предъявить${n ? `: ${c.documents[S.picks[0]].title}` : ''}`;
       const max = c.maxMisses || 3;
+      const lostIds = ids.filter((id) => c.timed && S.closed && !S.seen.has(id));
+      const openCost = c.timedCost ?? 2;
       return scene('interview', `
         ${bar()}
         ${notice()}
-        <div class="room">
-          <article class="paper paper--transcript" aria-label="Протокол допроса">
+        <div class="room room--suspect">
+          ${suspectHtml()}
+          <article class="paper paper--transcript${S.fx === 'miss' ? ' shake' : ''}" aria-label="Протокол допроса">
             <h2>${c.transcriptTitle}</h2>
             <p class="sr-only" role="status">${S.say || ''}</p>
             ${logHtml()}
@@ -632,7 +722,8 @@
             ${q.locked
               ? `<p class="tray__t">Вопрос ${S.round + 1} из ${c.interview.length}</p><p class="tray__p">${q.lockedNote}</p>`
               : `<p class="tray__t">${q.prompt || 'Что предъявляешь?'} Вопрос ${S.round + 1} из ${c.interview.length}. Промахов: ${S.misses} из ${max}.</p>
-                 <div class="tray__chips">${ids.map((id) => { const lost = c.timed && S.closed && !S.seen.has(id); return chip(id, lost ? 'disabled' : `data-act="pick" aria-pressed="${S.picks.includes(id)}"`, lost ? 'не успели прочитать' : ''); }).join('')}</div>`}
+                 ${lostIds.length ? `<p class="tray__p">Непрочитанную бумагу можно запросить из архива: ${openCost} ${unit()} за каждую.</p>` : ''}
+                 <div class="tray__chips">${ids.map((id) => (lostIds.includes(id) ? chip(id, 'data-act="unseal"', `не прочитано: запросить за ${openCost} ${unit()}`) : chip(id, `data-act="pick" aria-pressed="${S.picks.includes(id)}"`))).join('')}</div>`}
           </div>
         </div>
         <footer class="dock">
@@ -643,41 +734,55 @@
         </footer>`);
     },
 
-    guess: () => {
-      const G = C().guess;
-      const st = S.guess;
-      const o = st.pick === null ? null : G.options[st.pick];
-      return scene('guess', `
+    guess: pickView('guess', 'guess', ['gpick', 'ganswer'], 'Ваша версия', 'Выбери версию. Это не стоит часов.'),
+    // Ставка перед финалом: что станет главным доказательством. Конверт вскрывается в разборе дела.
+    bet: pickView('bet', 'bet', ['bpick', 'banswer'], 'Ставка', 'Выбери одно. Конверт вскроют в разборе дела.'),
+
+    // Карта места: фото с точками, игрок отмечает те, что подтверждаются бумагами. Лишняя отметка стоит часы.
+    map: () => {
+      const M = C().map; const st = S.map; const done = st.done;
+      const sel = st.sel === null ? null : M.pins[st.sel];
+      const marked = (i) => st.marks.includes(i);
+      const cls = (p, i) => (done ? (p.hit ? (marked(i) ? ' pin--ok' : ' pin--miss') : (marked(i) ? ' pin--bad' : '')) : (marked(i) ? ' pin--on' : ''));
+      const verdict = (p, i) => (p.hit ? (marked(i) ? 'Верно.' : 'Пропущено.') : (marked(i) ? `Лишняя отметка, −${M.missCost} ${unitEnd()}` : 'Бумагами не подтверждается.'));
+      const hits = M.pins.filter((p) => p.hit).length;
+      return scene('map', `
         ${bar()}
         ${notice()}
-        <div class="room">
-          <article class="paper paper--transcript" aria-label="${G.title || 'Ваша версия'}">
-            <h2>${G.title || 'Ваша версия'}</h2>
+        <div class="audit">
+          <article class="paper paper--photo map" aria-label="${M.title}">
+            <h2>${M.title}</h2>
+            <p>${M.hint} Лишняя отметка стоит ${M.missCost}&nbsp;${unitEnd()}</p>
             <p class="sr-only" role="status">${S.say || ''}</p>
-            <p>${G.prompt}</p>
-            ${st.done ? `<p class="mark"><span class="stamp">Записано</span></p><p>${G.saved || 'Версия записана в блокнот. Посмотрим, подтвердится ли она.'}</p>` : ''}
+            <figure class="map__fig">
+              <img src="${M.img}" width="1672" height="941" alt="${M.alt || ''}">
+              ${M.pins.map((p, i) => `<button class="pin${cls(p, i)}" data-act="mpin" data-i="${i}" style="left:${p.x}%;top:${p.y}%" aria-pressed="${st.sel === i}" aria-label="Точка ${i + 1}: ${p.t}">${i + 1}</button>`).join('')}
+            </figure>
+            <div class="map__pop" role="status">${sel
+              ? `<b>${st.sel + 1}. ${sel.t}</b><p>${sel.text}</p>${done ? `<p class="map__src">${verdict(sel, st.sel)}${sel.src ? ` Источник: ${sel.src}.` : ''}</p>` : `<button class="slot__btn" data-act="mmark" data-i="${st.sel}" aria-pressed="${marked(st.sel)}">${marked(st.sel) ? 'Снять отметку' : 'Отметить'}</button>`}`
+              : '<p>Нажми на точку, чтобы прочитать, что здесь нашли.</p>'}</div>
+            <p class="tl__msg">${done ? `${M.okLine ? M.okLine(st.marks.filter((i) => M.pins[i].hit).length, hits) : `Верных отметок: ${st.marks.filter((i) => M.pins[i].hit).length} из ${hits}.`}${st.marks.filter((i) => !M.pins[i].hit).length ? ` Лишних: ${st.marks.filter((i) => !M.pins[i].hit).length}.` : ''}` : `Отмечено ${st.marks.length}. Значимых точек: ${hits}.`}</p>
           </article>
-          <div class="tray">
-            <p class="tray__t">${st.done ? 'Ваша версия' : 'Выбери версию. Это не стоит часов.'}</p>
-            <div class="tray__chips">
-              ${G.options.map((x, i) => `<button class="chip" data-act="gpick" data-i="${i}" aria-pressed="${st.pick === i}" ${st.done ? 'disabled' : ''}><span class="chip__t">${x.title}</span>${x.text ? `<span class="chip__s">${x.text}</span>` : ''}</button>`).join('')}
-            </div>
-          </div>
         </div>
         <footer class="dock">
-          ${st.done
-            ? '<button class="btn" data-act="forward">Дальше</button>'
-            : `<button class="btn" data-act="ganswer" ${st.pick === null ? 'disabled' : ''}>Записать версию${o ? `: ${o.title}` : ''}</button>`}
+          ${done
+            ? `<button class="btn" data-act="forward">${M.next || 'Дальше'}</button>`
+            : `<button class="btn" data-act="mcheck" ${st.marks.length ? '' : 'disabled'}>${M.submit || 'Подать осмотр'}${st.marks.length ? `: отмечено ${st.marks.length}` : ''}</button>`}
         </footer>`);
     },
 
-    turn: () => scene('turn', `
+    // Поворот: одна бумага крупно, с печатью и штампом даты поверх текста
+    turn: () => {
+      const t = C().turn;
+      return scene('turn', `
       ${bar()}
       ${notice()}
       <div class="stage stage--center">
-        ${paper(C().turn)}
-        <button class="btn" data-act="forward">${C().turn.button}</button>
-      </div>`),
+        <p class="kicker">Поворот${t.title ? ` · ${t.title}` : ''}</p>
+        <article class="paper paper--${t.kind} turn-doc"><span class="clip" aria-hidden="true"></span>${t.date ? `<span class="datestamp" aria-hidden="true">${t.date}</span>` : ''}${t.stamp ? `<span class="stamp-big" aria-hidden="true">${t.stamp}</span>` : ''}${body(t)}</article>
+        <button class="btn" data-act="forward">${t.button}</button>
+      </div>`);
+    },
 
     // Разбор открывается после короткого опроса «правда или придумано»: пять утверждений из дела, игрок отвечает сам, потом читает.
     solution: () => {
@@ -696,6 +801,7 @@
             : `<p class="quiz__res"><span class="debrief__mark ${a[i] === null ? 'debrief__mark--skip' : !!a[i] === q.real ? 'debrief__mark--ok' : 'debrief__mark--miss'}">${a[i] === null ? 'Пропущено' : !!a[i] === q.real ? 'Верно' : 'Нет'}</span> ${q.real ? 'Так и было.' : 'Придумано для игры.'}${q.note ? ` ${q.note}` : ''}</p>`}</li>`).join('')}</ol>
           ${doneQ ? '' : '<button class="btn btn--quiet" data-act="squizskip">Пропустить и читать разбор</button>'}
         </article>` : ''}
+        ${doneQ && c.bet && S.bet.done ? `<article class="paper paper--letter envelope" aria-label="Конверт со ставкой"><p class="mark"><span class="stamp">Конверт вскрыт</span></p><p><b>Ваша ставка:</b> ${c.bet.options[S.bet.pick].title}.</p><p>${c.bet.options[S.bet.pick].ok ? c.bet.hit : c.bet.miss}</p></article>` : ''}
         ${doneQ ? `<article class="paper paper--typed paper--memo">${c.solution.html}</article>
         ${c.solution.next ? `<a class="btn" href="${c.solution.next.href}">${c.solution.next.label}</a>` : ''}
         <a class="btn btn--quiet" href="./">Все дела</a>
@@ -703,15 +809,21 @@
       </div>`);
     },
 
+    // Финал главы: полоса «глава n из m» и три карточки (итог, разбор, паспорт). Абзац итога зависит от часов: ноль, полный запас, меньше половины.
     end: () => {
       const c = C();
       const next = CHS[S.ch + 1];
+      const zero = S.hours <= 0 ? `<p class="mark"><span class="stamp">${(c.clock.label || 'Время').replace(/^часов /i, '')}: ноль</span></p><p>${c.end.zero || c.clock.zero || (!next ? 'Запас времени кончился.' : next.startHours != null ? 'Запас времени кончился. Следующая глава начинается с новым сроком, но этот ноль останется в разборе.' : 'Запас времени кончился: в следующей главе первый же промах оборвёт допрос.')}</p>` : '';
+      const tone = S.hours <= 0 ? '' : S.hours >= S.start ? c.end.full : S.hours * 2 <= S.start ? c.end.low : '';
       return scene('end', `
         <div class="stage stage--center">
-          <article class="paper paper--typed paper--memo">${fileTag()}${S.hours <= 0 ? `<p class="mark"><span class="stamp">${(c.clock.label || 'Время').replace(/^часов /i, '')}: ноль</span></p><p>${c.clock.zero || (!next ? 'Запас времени кончился.' : next.startHours != null ? 'Запас времени кончился. Следующая глава начинается с новым сроком, но этот ноль останется в разборе.' : 'Запас времени кончился: в следующей главе первый же промах оборвёт допрос.')}</p>` : ''}${c.end.html(S.found.size, total(c), S.hours, S)}${c.end.real ? `<p class="real"><span class="stamp">Это было на самом деле</span> ${c.end.real}</p>` : ''}</article>
+          <div class="progress"><span>Дело №${GAME}</span><ol class="segs" aria-label="Главы">${CHS.map((x, i) => `<li${i <= S.ch ? ' class="on"' : ''}></li>`).join('')}</ol><span>${c.name} из ${CHS.length}</span></div>
           ${notice()}
-          ${passportHtml()}
-          ${debriefHtml()}
+          <div class="cards">
+            <article class="paper paper--typed card"><p class="card__k">Итог</p>${fileTag()}${zero}${c.end.html(S.found.size, total(c), S.hours, S)}${tone ? `<p>${tone}</p>` : ''}${c.end.real ? `<p class="real"><span class="stamp">Это было на самом деле</span> ${c.end.real}</p>` : ''}</article>
+            ${debriefHtml()}
+            ${passportHtml()}
+          </div>
           ${!next && c.reveal && S.revealOpen ? `<article class="paper paper--form paper--memo reveal" id="reveal" tabindex="-1"><p class="mark"><span class="stamp">Чьё это было дело</span></p>${c.reveal.html.replace(/<h1>[\s\S]*?<\/h1>/, '')}</article>` : ''}
           ${next && gated() ? `<article class="paper paper--form paywall"><h2>${c.gate.title}</h2>${c.gate.html}</article>` : ''}
           ${next && !gated() ? `<button class="btn" data-act="nextch">Дальше: ${next.name}, «${next.title}»</button>` : ''}
@@ -723,7 +835,7 @@
     },
   };
 
-  const go = (step) => { S.step = step; S.picks = []; S.say = ''; S.notice = S.noticeNext || ''; S.noticeNext = ''; fireInbox(`step:${step}`); render(); window.scrollTo(0, 0); };
+  const go = (step) => { bossAuto(); S.step = step; S.picks = []; S.say = ''; S.notice = S.noticeNext || ''; S.noticeNext = ''; fireInbox(`step:${step}`); render(); window.scrollTo(0, 0); };
   const forward = () => { const st = C().steps; go(st[st.indexOf(S.step) + 1]); };
 
   let rendering = false;
@@ -745,6 +857,8 @@
     document.body.classList.toggle('has-dossier', S.dos.on || S.recap);
     const t = document.querySelector('.paper--transcript');
     if (t) t.scrollTop = t.scrollHeight;
+    if (S.fx === 'hit') stampSound();
+    S.fx = '';
     save();
   }
 
@@ -859,6 +973,42 @@
     squizskip: () => { (C().solution.quiz || []).forEach((q, i) => { if (S.sol.ans[i] === undefined) S.sol.ans[i] = null; }); render(); },
     gpick: (el) => { if (!S.guess.done) { S.guess.pick = +el.dataset.i; render(); } },
     ganswer: () => { if (S.guess.pick === null || S.guess.done) return; S.guess.done = true; S.say = 'Версия записана.'; render(); },
+    bpick: (el) => { if (!S.bet.done) { S.bet.pick = +el.dataset.i; render(); } },
+    banswer: () => { if (S.bet.pick === null || S.bet.done) return; S.bet.done = true; S.say = 'Ставка запечатана.'; render(); },
+    // входящее сверху: ответ меняет часы, сделка помечается в разборе
+    boffer: (el) => {
+      const m = (C().inbox || []).find((x) => x.id === el.dataset.id);
+      if (!m || S.inbox.ans[m.id] !== undefined || !m.offer[+el.dataset.i]) return;
+      const o = m.offer[+el.dataset.i];
+      S.inbox.ans[m.id] = +el.dataset.i; S.hours = Math.max(0, S.hours + (o.d || 0));
+      S.notice = o.out; S.say = o.out;
+      render();
+    },
+    // бумага, не прочитанная до закрытия архива: открыть за часы прямо на допросе
+    unseal: (el) => {
+      const id = el.dataset.id; const cost = C().timedCost ?? 2;
+      if (!C().documents[id] || S.seen.has(id)) return;
+      S.hours = Math.max(0, S.hours - cost); S.seen.add(id);
+      S.say = `Бумага «${C().documents[id].title}» запрошена из архива, потрачено ${cost} ${unitEnd()}`;
+      S.notice = S.say;
+      render();
+    },
+    mpin: (el) => { S.map.sel = S.map.sel === +el.dataset.i ? null : +el.dataset.i; render(); },
+    mmark: (el) => {
+      if (S.map.done) return;
+      const i = +el.dataset.i;
+      S.map.marks = S.map.marks.includes(i) ? S.map.marks.filter((x) => x !== i) : [...S.map.marks, i];
+      render();
+    },
+    mcheck: () => {
+      const M = C().map;
+      if (S.map.done || !S.map.marks.length) return;
+      const extra = S.map.marks.filter((i) => !M.pins[i].hit).length;
+      S.hours = Math.max(0, S.hours - extra * M.missCost);
+      S.map.done = true;
+      S.say = `Осмотр подан. Лишних отметок: ${extra}.`;
+      render();
+    },
     labback: () => { S.lab.phase = 'tests'; S.lab.pick = []; render(); },
     labpick: (el) => {
       const id = el.dataset.id; const need = Math.min(C().lab.need, S.lab.run.length);
@@ -941,7 +1091,7 @@
       const q = c.interview[S.round];
       const id = S.picks[0];
       reply(c.suspect, q.say, 'sh');
-      reply('Следователь', `Предъявляю: ${S.picks.map((x) => c.documents[x].title).join(', ')}.`, 'cop');
+      reply(c.me || 'Следователь', `Предъявляю: ${S.picks.map((x) => c.documents[x].title).join(', ')}.`, 'cop');
       const ok = q.multi ? [q.needs, ...(q.alts || [])].some((set) => sameSet(S.picks, set)) : q.needs.includes(id);
       const trap = !ok && !q.multi && q.traps?.[id];
       const part = !ok && !q.multi && q.partial?.[id] && !S.partial.includes(`${S.round}:${id}`);
@@ -961,10 +1111,12 @@
         if (q.note) reply('', q.note, 'note');
         reply('', q.stamp || 'Противоречие зафиксировано', 'mark');
         S.say = 'Противоречие зафиксировано.';
+        S.fx = 'hit';
       } else {
         const cost = trap ? (trap.cost ?? 4) : c.clock.missCost;
         S.hours = Math.max(0, S.hours - cost);
         S.misses += 1;
+        S.fx = 'miss';
         reply(c.suspect, trap ? trap.say : q.miss, 'sh');
         if (trap && trap.note) reply('', trap.note, 'note');
         reply('', trap ? `Бумага сработала против вас. Потеряно ${cost} ${unitEnd()}` : `Мимо. Потеряно ${cost} ${unitEnd()}`, 'loss');
@@ -974,7 +1126,7 @@
     },
     skip: () => {
       const q = C().interview[S.round];
-      reply(C().suspect, q.say, 'sh'); reply('Следователь', 'Переходим к следующему вопросу.', 'cop');
+      reply(C().suspect, q.say, 'sh'); reply(C().me || 'Следователь', 'Переходим к следующему вопросу.', 'cop');
       next();
     },
     accept: () => {
@@ -991,7 +1143,7 @@
   };
 
   // Двойной щелчок по «Решить» или «Дальше»: вторая половина попадала бы на новую кнопку и пропускала результат ответа.
-  const COMMIT = new Set(['ganswer', 'check', 'forward', 'nextch', 'oanswer', 'ckanswer', 'labsubmit', 'submit', 'present', 'skip', 'accept', 'qask', 'revealin', 'tosol', 'squizskip']);
+  const COMMIT = new Set(['ganswer', 'banswer', 'check', 'forward', 'nextch', 'oanswer', 'ckanswer', 'labsubmit', 'submit', 'present', 'skip', 'accept', 'qask', 'revealin', 'tosol', 'squizskip', 'mcheck', 'unseal', 'boffer']);
   let lastCommit = 0;
   app.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');

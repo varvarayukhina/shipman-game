@@ -40,6 +40,10 @@
     ['surv', 'Наблюдение', ['surv1', 'surv2', 'photo']],
     ['trace', 'Следы', ['phones', 'search']],
   ])));
+  set(w.ZC, A(R('desk', 'Кабинет', 'img/case-desk.jpg', [
+    ['said', 'Его слова', ['bio']],
+    ['proof', 'Что есть у обвинения', ['phones', 'surv1', 'surv2', 'search']],
+  ])));
   set(w.Z2, A(R('desk', 'Кабинет', 'img/case-desk.jpg', [['surv', 'Наблюдение', ['surv1', 'surv2', 'log', 'notes']]])));
   set(w.Z3, A(R('desk', 'Кабинет', 'img/case-desk.jpg', [['law', 'Закон и обвинение', ['law', 'count', 'bio']]])));
 
@@ -48,7 +52,7 @@
     ['sale', 'Продажа', ['catalog', 'merz', 'emmaus']],
   ])));
   set(w.W2, A(R('desk', 'Кабинет', 'img/case-desk.jpg', [
-    ['arr', 'Арест и продажа', ['charge', 'sale']],
+    ['arr', 'Арест и продажа', ['charge', 'sale', 'broker']],
     ['ref', 'Справки', ['bio', 'emmaus']],
   ])));
   set(w.W3, A(R('desk', 'Кабинет', 'img/case-desk.jpg', [
